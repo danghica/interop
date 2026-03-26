@@ -22,14 +22,19 @@ The system includes standard ML types, products, a ``boxed'' foreign type called
   \item \textbf{Types:}
   $\tau \Coloneqq \text{unit} \mid \text{bool} \mid \text{int} \mid \tau \to \tau \mid \tau_1 \times \tau_2 \mid \tau\,\text{ref} \mid \text{extern}$
   \item \textbf{Expressions:}
-  $e \Coloneqq () \mid \textsf{true} \mid \textsf{false} \mid i \mid x \mid \lambda x{:}\tau.\, e \mid e\; e \mid (e_1, e_2) \mid \text{fst}\; e \mid \text{snd}\; e \mid \text{if}\; e\ \text{then}\; e\ \text{else}\; e \mid \text{ref}\; e \mid {!}e \mid e \mathrel{:=} e \mid e \mathrel{:=}^{\textsf{ext}}_{\tau} e \mid \text{cast}_{\tau}\, e \mid \phi \mid \text{let}\; x{:}\tau = e\ \text{in}\; e$
+  $e \Coloneqq () \mid \textsf{true} \mid \textsf{false} \mid i \mid x \mid \lambda x{:}\tau.\, e \mid e\; e \mid (e_1, e_2) \mid \text{fst}\; e \mid \text{snd}\; e \mid \text{if}\; e\ \text{then}\; e\ \text{else}\; e \mid \text{ref}\; e \mid {!}e \mid e \mathrel{:=} e \mid \text{cast}_{\tau}\, e \mid \phi \mid \text{let}\; x{:}\tau = e\ \text{in}\; e$
   \item \textbf{Values:}
   $v \Coloneqq () \mid \textsf{true} \mid \textsf{false} \mid i \mid l \mid \lambda x{:}\tau.\, e \mid (v_1, v_2) \mid \phi \mid \text{box}(v, \tau)$
 \end{itemize}
 
 We say that a type is \emph{native} if it has no occurrences of the \textsf{extern} type in its composition.
 
+\paragraph{Boundary discipline (cast-centric).}
+There are no surface-only markers such as $\texttt{let}^{\textsf{ext}}$ or application/assignment superscripts.
+Extern-compatible typing rules (\textsf{[{Let-extern}]}, \textsf{[App-extern]}, \textsf{[{Assign-extern}]}) use $\sim_{\textsf{ext}}$ with the \emph{right-hand} type always native; operationally, the expected native type is enforced via $\text{cast}_{\tau}$ and the conversion judgment $v \Downarrow_{\tau} v'$ (Section~\ref{sec:opsem}).
+
 \section{Static Typing Rules ($\Gamma \vdash e : \tau$)}
+\label{sec:static}
 
 \medskip
 \noindent
@@ -51,7 +56,8 @@ Let
     \delta \Coloneqq \text{unit} \mid \text{bool} \mid \text{int} \mid \delta_1 \times \delta_2 \mid \delta\,\text{ref}
 \]
 be native data types.
-A pair $(\delta, \delta^{\text{ext}})$ is \emph{extern-compatible}, written $\delta \sim_{\textsf{ext}} \delta^{\text{ext}}$, when $\delta^{\text{ext}}$ has the same data shape as $\delta$ and may replace any native leaf of $\delta$ by \textsf{extern}. By construction, extern-compatible types are data-only: function types $\tau_1 \to \tau_2$ are excluded. 
+We write extern-compatibility as $\tau' \sim_{\textsf{ext}} \tau$ with the \emph{right-hand} $\tau$ always a native data type $\delta$ (no \textsf{extern} in $\tau$).
+Function types $\tau_1 \to \tau_2$ are excluded from this data-only relation.
 
 Judgments use a \emph{typing context} $\Gamma$ mapping term variables in scope to types; for example, rule~\textsf{[Var]} requires $x : \tau \in \Gamma$, and rules for $\lambda$ and \texttt{let} extend $\Gamma$ when typing bodies.
 Foreign constants $\phi$ are taken from a fixed global assignment of types (rule~\textsf{[Foreign-Const]}: for each $\phi$, a matching $\tau$ is fixed once for the whole program).
@@ -73,7 +79,7 @@ Foreign constants $\phi$ are taken from a fixed global assignment of types (rule
   \frac{\Gamma \vdash e_1 : \tau_1 \to \tau_2 \quad \Gamma \vdash e_2 : \tau_1}{\Gamma \vdash e_1\; e_2 : \tau_2}\,\text{[App]}
 \end{gather*}
 
-The rule for [App] is later on generalized and can be ommited in the case of native types.
+Rule~\textsf{[App-extern]} below generalizes \textsf{[App]} when the argument is extern-compatible with the domain.
 
 
 \begin{gather*}
@@ -90,25 +96,26 @@ The rule for [App] is later on generalized and can be ommited in the case of nat
   \frac{\Gamma \vdash e_1 : \tau\,\text{ref} \quad \Gamma \vdash e_2 : \tau}{\Gamma \vdash e_1 \mathrel{:=} e_2 : \text{unit}}\,\text{[{Assign}]}
 \end{gather*}
 
-References of non-native data types are not inhabited, so the dereference and assignment rules are trivially applicable to such types. Therefore, we do not need to distinguish between native and non-native data types in these rules. The assignment rule is later generalized and can be ommited in the case of native types.
+References only store native content types (\textsf{[Ref]}). Dereference and native assignment (\textsf{[{Assign}]}) use that type uniformly. Extern-compatible values may still be \emph{written} when they match the cell's native type via $\sim_{\textsf{ext}}$ (\textsf{[{Assign-extern}]}).
 
 \subsection{State and Foreign Typing Rules (extern-aware)}
 \[
-  \frac{}{\Gamma \vdash \phi : \tau\rightarrow\text{extern}}\,\text{[{Foreign-Const}]}
+  \frac{\Phi(\phi) = \tau \to \text{extern} \quad \text{$\tau$ is a native type}}{\Gamma \vdash \phi : \tau \to \text{extern}}\,\text{[{Foreign-Const}]}
 \]
-Extern typed values can only be produced by foreign functions. They can also be bound to function arguments called by functions in the non-native code.
+where $\Phi$ fixes one arrow type per foreign constant.
+Extern-typed values flow only from these constants (and compositions thereof) at the FFI boundary; consuming native code meets them through $\text{cast}_{\tau}$ or extern-compatible rules.
 
 \begin{gather*}
   \frac{\Gamma \vdash e : \tau \quad \text{$\tau$ is a native type}}{\Gamma \vdash \text{ref}\; e : \tau\,\text{ref}}\,\text{[Ref]}
   \\[0.75em]
-  \frac{\Gamma \vdash e_1 : \tau\,\text{ref} \quad \Gamma \vdash e_2 : \tau' \quad \tau \sim_{\textsf{ext}} \tau'}{\Gamma \vdash e_1 \mathrel{:=} e_2 : \text{unit}}\,\text{[{Assign-Extern}]}
+  \frac{\Gamma \vdash e_1 : \tau\,\text{ref} \quad \Gamma \vdash e_2 : \tau' \quad \tau' \sim_{\textsf{ext}} \tau \quad \text{$\tau$ is a native type}}{\Gamma \vdash e_1 \mathrel{:=} e_2 : \text{unit}}\,\text{[{Assign-extern}]}
 \end{gather*}
 
 Creating  a reference of a non-native type is disallowed via the type system.
-The assignment operation is only applicable to references of native types, but the assigned values can be non-native and extern-compatible. The assignent operation is semantically a different operation than the assignment operation for native types because it will insert a runtime type check to ensure that the assigned value is compatible with the expected type.
+The assignment operation is only applicable to references of native types, but the assigned values can be non-native and extern-compatible. The assignment operation is semantically a generalization of the the assignment operation for native types because it will insert a runtime type check to ensure that the assigned value is compatible with the expected type. In the case of native types, the cast is trivial and can be omitted (compiler optimization).
 
 \begin{gather*}
-  \frac{\Gamma \vdash e_1 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1 \quad \Gamma, x{:}\tau_1 \vdash e_2 : \tau_2 \quad \text{$\tau_1$ is a native type}}{\Gamma \vdash \text{let}\; x{:}\tau_1 = e_1\ \text{in}\; e_2 : \tau_2}\,\text{[{Let-Extern-Compatible}]}
+  \frac{\Gamma \vdash e_1 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1 \quad \Gamma, x{:}\tau_1 \vdash e_2 : \tau_2 \quad \text{$\tau_1$ is a native type}}{\Gamma \vdash \text{let}\; x{:}\tau_1 = e_1\ \text{in}\; e_2 : \tau_2}\,\text{[{Let-extern}]}
 \end{gather*}
 
 The rule for let ensures that no non-native typed values exist in the body of the let binding. 
@@ -117,19 +124,26 @@ If the bound value is native then the cast is trivial and can be omitted.
 This on-the-fly conversion of non-native to native values can also happen, most generally, in function applications: 
 
 \[
-  \frac{\Gamma \vdash e_1 : \tau_1 \to \tau_2 \quad \Gamma \vdash e_2 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1}{\Gamma \vdash e_1\,(e_2) : \tau_2}\,\text{[App-Extern-Compatible]}
+  \frac{\Gamma \vdash e_1 : \tau_1 \to \tau_2 \quad \Gamma \vdash e_2 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1 \quad \text{$\tau_1$ is a native type}}{\Gamma \vdash e_1\; e_2 : \tau_2}\,\text{[App-extern]}
 \]
 
-The App-Extern-Compatible rule is a generalization of the App rule that allows for the application of a function to an extern-compatible value, since any native type is trivially extern-compatible to itself.
+Rule~\textsf{[App-extern]} generalizes \textsf{[App]} when the argument type is extern-compatible with the native domain $\tau_1$; reflexivity of $\sim_{\textsf{ext}}$ on native $\tau$ recovers ordinary application.
 \[
   \frac{\Gamma \vdash e : \tau' \quad \tau' \sim_{\textsf{ext}} \tau \quad \text{$\tau$ is a native type}}{\Gamma \vdash \text{cast}_{\tau}\, e : \tau}\,\text{[Cast-Extern-Compatible]}
 \]
-The extern-compatible typing rules (\textbf{[Let-Extern-Compatible]}, \textbf{[App-Extern-Compatible]}, \textbf{[Assign-Extern]}) are understood as inserting these explicit boundary casts toward the expected native type.
+The extern-compatible typing rules insert $\text{cast}_{\tau}$ at elaboration toward the native type $\tau$ named in the rule: \textbf{[Let-extern]} as $\text{let}\; x{:}\tau = \text{cast}_{\tau}\, e_1\ \text{in}\; e_2$, \textbf{[App-extern]} as $e_1\; (\text{cast}_{\tau_1}\, e_2)$, and \textbf{[{Assign-extern}]} as $e_1 \mathrel{:=} \text{cast}_{\tau}\, e_2$, where in each case the outer $\tau$ (resp.\ $\tau_1$) is the \emph{native} type on the right of $\sim_{\textsf{ext}}$.
 
-\section{Operational Semantics ($\langle e, \mu \rangle \to \langle e', \mu' \rangle$)}
+\section{Operational Semantics}
+\label{sec:opsem}
 
-We take $e$ to be the expression and $\mu$ the store (mapping locations $l$ to values $v$). Runtime cell-content types are not stored in a separate component.
-Instead, boundary conversions are made explicit by $\text{cast}_{\tau}\,e$, where $\tau$ is a native expected type inserted from typing (for \texttt{let}, extern-compatible application, and extern-aware assignment).
+Reduction relates configurations to configurations or to a distinguished outcome $\text{error}$:
+\[
+  \langle e, \mu \rangle \to \langle e', \mu' \rangle
+  \quad\text{or}\quad
+  \langle e, \mu \rangle \to \text{error}.
+\]
+We take $e$ to be the expression and $\mu$ the store (mapping locations $l$ to values $v$).
+Boundary conversions are implemented by $\text{cast}_{\tau}\, e$ and the partial conversion relation $v \Downarrow_{\tau} v'$ below, where $\tau$ is always native in cast and let rules.
 
 \subsection{Administrative Reductions}
 \[
@@ -137,14 +151,12 @@ Instead, boundary conversions are made explicit by $\text{cast}_{\tau}\,e$, wher
   \langle (\lambda x{:}\tau.\, e)\ v, \mu \rangle &\to \langle e[v'/x], \mu \rangle \quad (\text{if } v \Downarrow_{\tau} v') \\
   \langle \text{ref}\; v, \mu \rangle &\to \langle l, \mu[l \mapsto v] \rangle \quad (l \notin \operatorname{dom}(\mu)) \\
   \langle {!}l, \mu \rangle &\to \langle \mu(l), \mu \rangle \\
-  \langle l \mathrel{:=} v, \mu \rangle &\to \langle (), \mu[l \mapsto v'] \rangle \quad (\text{if } v \Downarrow v') \\
+  \langle l \mathrel{:=} v, \mu \rangle &\to \langle (), \mu[l \mapsto v'] \rangle \quad (\text{if } v \Downarrow_{\tau} v') \\
   \langle \text{if}\; \textsf{true}\ \text{then}\; e_1\ \text{else}\; e_2, \mu \rangle &\to \langle e_1, \mu \rangle \\
   \langle \text{if}\; \textsf{false}\ \text{then}\; e_1\ \text{else}\; e_2, \mu \rangle &\to \langle e_2, \mu \rangle
 \end{aligned}
 \]
 The $\text{ref}$ rule allocates a fresh location; no auxiliary runtime type map is maintained.
-
-Note that in application and in assigment, if the argument is of a native type the cast is trivial and can be omitted. 
 
 \subsection{Products and Projections}
 \[
@@ -164,6 +176,21 @@ Evaluation commutes into pairs and projections when the relevant sub-expression 
   \frac{\langle e, \mu \rangle \to \langle e', \mu' \rangle}{\langle \text{snd}\; e, \mu \rangle \to \langle \text{snd}\; e', \mu' \rangle}\,\text{[R-Snd]}
 \end{gather*}
 
+\subsection{Application, references, and assignment (call-by-value)}
+\begin{gather*}
+  \frac{\langle e_1, \mu \rangle \to \langle e_1', \mu' \rangle}{\langle e_1\; e_2, \mu \rangle \to \langle e_1'\; e_2, \mu' \rangle}\,\text{[R-App-L]}
+  \qquad
+  \frac{\langle e_2, \mu \rangle \to \langle e_2', \mu' \rangle}{\langle v_1\; e_2, \mu \rangle \to \langle v_1\; e_2', \mu' \rangle}\,\text{[R-App-R]}
+  \\[0.75em]
+  \frac{\langle e, \mu \rangle \to \langle e', \mu' \rangle}{\langle \text{ref}\; e, \mu \rangle \to \langle \text{ref}\; e', \mu' \rangle}\,\text{[R-Ref]}
+  \qquad
+  \frac{\langle e, \mu \rangle \to \langle e', \mu' \rangle}{\langle {!}e, \mu \rangle \to \langle {!}e', \mu' \rangle}\,\text{[R-Deref]}
+  \\[0.75em]
+  \frac{\langle e_1, \mu \rangle \to \langle e_1', \mu' \rangle}{\langle e_1 \mathrel{:=} e_2, \mu \rangle \to \langle e_1' \mathrel{:=} e_2, \mu' \rangle}\,\text{[R-Assign-L]}
+  \qquad
+  \frac{\langle e_2, \mu \rangle \to \langle e_2', \mu' \rangle}{\langle v_1 \mathrel{:=} e_2, \mu \rangle \to \langle v_1 \mathrel{:=} e_2', \mu' \rangle}\,\text{[R-Assign-R]}
+\end{gather*}
+
 \subsection{Conditionals}
 The guard is evaluated first; branches are not reduced until the guard is a boolean value.
 \begin{gather*}
@@ -172,18 +199,31 @@ The guard is evaluated first; branches are not reduced until the guard is a bool
 
 \subsection{Foreign and Cast Transitions}
 Each foreign constant $\phi$ is a value and does not reduce. Booleans are values as usual.
-Define a partial conversion relation on values, $v \Downarrow_{\tau} v'$.
-The phrase ``conversion succeeds'' means exactly that a judgment $v \Downarrow_{\tau} v'$ is derivable from the following cases:
+Define a partial conversion relation on values, $v \Downarrow_{\tau} v'$, only when $\tau$ is a native type.
+The phrase ``conversion succeeds'' means that $v \Downarrow_{\tau} v'$ is derivable from the following clauses (no other base cases):
 \[
 \begin{gathered}
-  \frac{\text{$\tau$ is a native type}}{v \Downarrow_{\tau} v}
+  \frac{}{() \Downarrow_{\text{unit}} ()}
+  \qquad
+  \frac{i \in \mathbb{Z}}{i \Downarrow_{\text{int}} i}
+  \qquad
+  \frac{}{\textsf{true} \Downarrow_{\text{bool}} \textsf{true}}
+  \qquad
+  \frac{}{\textsf{false} \Downarrow_{\text{bool}} \textsf{false}}
+  \\[0.75em]
+  \frac{}{\lambda x{:}\tau_1.\, e \Downarrow_{\tau_1 \to \tau_2} \lambda x{:}\tau_1.\, e}
+  \qquad
+  \frac{}{l \Downarrow_{\tau\,\text{ref}} l}
+  \qquad
+  \frac{\Phi(\phi) = \tau \to \text{extern}}{\phi \Downarrow_{\tau \to \text{extern}} \phi}
   \\[0.75em]
   \frac{v_1 \Downarrow_{\tau_1} v_1' \quad v_2 \Downarrow_{\tau_2} v_2'}{(v_1, v_2) \Downarrow_{\tau_1 \times \tau_2} (v_1', v_2')}
   \\[0.75em]
-  \frac{v \Downarrow_{\tau} v'}{\text{box}(v, \tau) \Downarrow_{\tau} v'}
+  \frac{v \Downarrow_{\tau} v' \quad \sigma = \tau}{\text{box}(v, \sigma) \Downarrow_{\tau} v'}
 \end{gathered}
 \]
-If no such derivation exists, conversion fails.
+If no such derivation exists, write $v \not\Downarrow_{\tau}$.
+Tags on $\text{box}(v, \sigma)$ must match the target $\tau$; otherwise conversion fails.
 
 Cast reduction rules:
 \begin{gather*}
@@ -203,25 +243,23 @@ Let reduction rules:
   \frac{\langle e_1, \mu \rangle \to \langle e_1', \mu' \rangle}{\langle \text{let}\; x{:}\tau = e_1\ \text{in}\; e_2, \mu \rangle \to \langle \text{let}\; x{:}\tau = e_1'\ \text{in}\; e_2, \mu' \rangle}\,\text{[R-Let]}
 \end{gather*}
 
-The boundary forms $\text{let}^{\textsf{ext}}$ and $(\cdot)^{\textsf{ext}}$ in function application, together with \textbf{[Assign-Extern]}, are interpreted by elaboration into explicit casts:
-$\text{let}\; x{:}\tau = \text{cast}_{\tau}(e_1)\ \text{in}\; e_2$ for $\text{let}^{\textsf{ext}}\; x{:}\tau = e_1\ \text{in}\; e_2$,
-$e_1\;(\text{cast}_{\tau_1}(e_2))$ for $e_1\,(e_2)^{\textsf{ext}}$,
-and $e_1 := \text{cast}_{\tau}(e_2)$ for $e_1 \mathrel{:=}^{\textsf{ext}}_{\tau} e_2$.
-
 \subsection{Blame (optional)}
 
 The rules above reduce mismatches at the FFI boundary to $\text{error}$ without saying \emph{which} party violated the agreement.
-Following work on \emph{contracts} and \emph{gradual typing}, \emph{blame} names that responsibility: each runtime check is a contract between a \emph{native} expectation (the annotation $\tau$ in \texttt{let}, or the expected type carried by $\mathrel{:=}^{\textsf{ext}}_{\tau}$) and a \emph{foreign} or producer-side claim carried by the tag $\sigma$ on $\text{box}(v, \sigma)$.
+Following work on \emph{contracts} and \emph{gradual typing}, \emph{blame} names that responsibility: each runtime check is a contract between a \emph{native} expectation fixed by the \emph{static} rules (and elaboration) and a \emph{foreign} or producer-side claim carried by the tag on $\text{box}(v, \sigma)$.
+Concretely: for \textsf{[{Let-extern}]}, the expectation is the native annotation $\tau$ on $x$ (rules \textsf{[R-Let-Val]} / \textsf{[R-Let-Val-Fail]} and $\text{cast}_{\tau}$ after elaboration).
+For \textsf{[{Assign-extern}]}, the expectation is the native content type $\tau$ such that the left-hand reference is typed at $\tau\,\text{ref}$; elaboration wraps the right-hand side in $\text{cast}_{\tau}$, and the administrative assignment step applies $v \Downarrow_{\tau} v'$ to the value $v$ actually written (Section~\ref{sec:opsem}).
+Configurations $\langle e, \mu \rangle$ do not attach that $\tau$ to locations in $\mu$---the calculus leaves $\tau$ as the native type supplied by the relevant typing derivation---but for typable programs those usages of $\tau$ agree across \textsf{[{Assign}]}, \textsf{[{Assign-extern}]}, elaboration, and reduction.
 
 Two boundary checks can produce $\text{error}$ today:
 \begin{itemize}
   \item \textbf{\texttt{let}} cast failure: the boxed value fails $\text{cast}_{\tau}$ (shape incompatibility or failed conversion). A typical policy is to \emph{blame the producer} of the boxed value if the foreign side is obliged to match the callee's declared $\tau$, and to \emph{blame the native annotation} if $\tau$ was chosen incorrectly against a trustworthy foreign tag. Implementations fix one convention for diagnostics.
-  \item \textbf{Extern assignment} cast failure: $\mathrel{:=}^{\textsf{ext}}_{\tau}$ inserts $\text{cast}_{\tau}$ before writing. If that cast fails, mismatch usually \emph{blames the writer} of the incompatible external value (or the logic that chose this target type $\tau$).
+  \item \textbf{Assignment} cast failure: either $\text{cast}_{\tau}$ fails on the elaborated RHS (\textsf{[R-Cast-Fail]}), or the cast succeeds but the administrative assignment rule fails because $v \not\Downarrow_{\tau}$ for the value $v$ reaching $l \mathrel{:=} v$. Either way the native $\tau$ is the one from \textsf{[{Assign}]} or \textsf{[{Assign-extern}]} for that reference. Mismatch usually \emph{blames the writer} of the incompatible external value (or incorrect typing/elaboration that picked $\tau$ for the cell vs.\ the written shape).
 \end{itemize}
 
 This calculus does not decorate $\text{error}$ with blame labels in the reduction relation; doing so would replace $\text{error}$ by something like $\text{error}_\beta$ for a label $\beta$ drawn from a fixed set (e.g.\ \texttt{foreign}, \texttt{native}, or module paths).
-The note in the static section about inserting checks on $op(e)$ when $e:\textsf{extern}$ would be another boundary at which a full account could attach blame to the caller or callee of $op$, analogously to higher-order contracts.
-Conceptually, blame refines \emph{who} failed, not \emph{when}: the failures above still arise at the first reduction step where the offending \texttt{let} or extern assignment runs, not after unbounded deferred checking.
+Foreign calls and higher-order boundaries could add additional labeled checks (by analogy with higher-order contracts); this fragment leaves them implicit.
+Conceptually, blame refines \emph{who} failed, not \emph{when}: the failures above still arise at the first reduction step where the offending $\text{cast}_{\tau}$, \texttt{let}, or assignment boundary runs, not after unbounded deferred checking.
 
 \paragraph{Example 1 (blame at \texttt{let}).}
 Suppose native code expects an integer but receives a boxed boolean tag from the boundary:
@@ -231,24 +269,30 @@ Suppose native code expects an integer but receives a boxed boolean tag from the
 Here $\sigma=\text{bool}$ and $\tau=\text{int}$ disagree.
 Under a ``foreign-must-match-native'' policy, blame is assigned to the producer of $\text{box}(\textsf{true}, \text{bool})$; under a ``trust-the-tag'' policy, blame is assigned to the native annotation $x{:}\text{int}$.
 
-\paragraph{Example 2 (blame at extern assignment).}
-Suppose a reference cell is written through an extern-aware assignment expecting integers:
+\paragraph{Example 2 (blame at assignment).}
+After elaboration of \textsf{[{Assign-extern}]}, writing an ill-typed boxed value into an \texttt{int} cell becomes $\text{cast}_{\text{int}}$ on the RHS, then an administrative write that requires $\Downarrow_{\text{int}}$ on the resulting value.
+Suppose $\Gamma \vdash l : \text{int}\,\text{ref}$ so $\tau=\text{int}$ throughout:
 \[
-  \langle l \mathrel{:=}^{\textsf{ext}}_{\text{int}} \text{box}(\textsf{false}, \text{bool}), \mu \rangle \to \text{error}.
+  \langle l \mathrel{:=} \text{cast}_{\text{int}}\, \text{box}(\textsf{false}, \text{bool}), \mu \rangle \to^* \text{error}.
 \]
-Again $\sigma=\text{bool}$ and $\tau=\text{int}$ disagree.
-The usual reading blames the writer of the incompatible boxed value (or the logic that selected target type $\text{int}$ for this write).
+Here the failure is typically at $\text{cast}_{\text{int}}$ (\textsf{[R-Cast-Fail]}): the tag $\sigma$ on the box does not match the target native type $\tau$.
+Thus $\sigma=\text{bool}$ and $\tau=\text{int}$ disagree.
+The usual reading blames the writer of the incompatible boxed value (or a typing/elaboration mistake that treated this cell as $\text{int}\,\text{ref}$).
 
 \textbf{Note:} The blame example is optional and only used for interoperability reasoning. I am not personally convinced that the concept of blame is useful for the purpose of this proposal.
 
 \section{Conclusions and Observations}
 
+The claims below follow from the typing rules (Section~\ref{sec:static}) and the operational semantics (Section~\ref{sec:opsem}) \emph{as written}: configurations are $\langle e, \mu \rangle$ without a runtime type component in the store.
+Runtime checks use the native type $\tau$ named in those rules---annotations on cast-capable \texttt{let}, the domain in \textsf{[App-extern]} after elaboration, the content type $\tau$ in \textsf{[{Assign}]} / \textsf{[{Assign-extern}]}, and conversion $v \Downarrow_{\tau} v'$ at $\lambda$-application and assignment.
+For well-typed programs, the $\tau$ at an assignment is the native content type of the LHS $\tau\,\text{ref}$; \textsf{[{Assign-extern}]} inserts $\text{cast}_{\tau}$ so the same $\tau$ governs both the cast chain and the final store conversion, even though $\mu$ records only values, not types.
+
 \subsection{Can \textsf{extern} camouflage an ill-typed program?}
 One might fear that a program rejected by the typechecker could be made acceptable by \emph{replacing} some annotations or argument types with \textsf{extern}, in the spirit of a universal escape hatch.
 That is not how this calculus behaves.
 
-Rule~\textsf{[Let]} requires the annotation $\tau_1$ to be a \emph{native} type, so one cannot annotate the bound variable with \textsf{extern}: a \texttt{let} of the form ``\texttt{let} $x:\text{extern} = e_1$ \texttt{in} $e_2$'' is not derivable, and one cannot ``fix'' a \texttt{let} by widening the bound name's type to \textsf{extern}.
-The disjunct $\Gamma \vdash e_1 : \text{extern}$ in \textsf{[Let]} means the \emph{right-hand side} may arrive from the FFI as \textsf{extern} while $x$ is still given a \emph{native} type $\tau_1$---that is controlled interoperability, not replacement of $\tau_1$ by \textsf{extern}.
+Rule~\textsf{[{Let-extern}]} requires the annotation $\tau_1$ to be a \emph{native} type, so one cannot annotate the bound variable with \textsf{extern}: a \texttt{let} of the form ``\texttt{let} $x:\text{extern} = e_1$ \texttt{in} $e_2$'' is not derivable, and one cannot ``fix'' a \texttt{let} by widening the bound name's type to \textsf{extern}.
+The premise $\tau_1' \sim_{\textsf{ext}} \tau_1$ allows the right-hand side to carry \textsf{extern} inside $\tau_1'$ while $x$ keeps the native shape $\tau_1$---controlled interoperability, not replacement of $\tau_1$ by \textsf{extern}.
 
 For $\lambda$-abstractions, rule~\textsf{[Abs]} allows a parameter type $\tau_1$ that mentions \textsf{extern}, so syntactically one can rewrite $\lambda x{:}\tau.\, e$ into $\lambda x{:}\text{extern}.\, e$.
 That can turn a rejected term into a derivable one only in \emph{degenerate} situations: the old parameter type was not semantically constraining the body (unused parameter, identity, or similar).
@@ -265,7 +309,7 @@ end
 Nothing analogous is available for arbitrary core expressions here: \textsf{extern} marks foreign \emph{data at the FFI boundary}, not ``defer all checking for this subexpression.''
 
 \subsection{Degenerate rewrites of lambdas alone}
-Rule~\textsf{[Abs]} does not require the parameter type $\tau_1$ to be native, whereas \textsf{[Let]} and \textsf{[Ref]} do constrain annotations and cell content types.
+Rule~\textsf{[Abs]} does not require the parameter type $\tau_1$ to be native, whereas \textsf{[{Let-extern}]} and \textsf{[Ref]} do constrain annotations and cell content types.
 At first glance this might suggest a way to rewrite a program so that \textsf{extern} appears where a native type used to be, effectively sidestepping the discipline enforced elsewhere---beyond the repair question above.
 That reading would still be misleading for any program that does real work on its arguments.
 
@@ -284,7 +328,7 @@ We do \emph{not} add to \textsf{[Abs]} the requirement that $\tau_1$ be native.
 Interoperability runs in \emph{both} directions: native code calls foreign routines (values flow out and back through \textsf{extern}), but foreign code also calls into native routines.
 When the callee is written in the core language and invoked from outside, arguments are how foreign data enters the native function; those formals naturally carry types that mention \textsf{extern} at the boundary until the body casts or unpacks them (e.g.\ via \texttt{let}).
 Forcing every $\lambda$-bound parameter to be native would rule out such entry points and would mistake a presentation preference for a semantic requirement.
-Rules \textsf{[Let]} and \textsf{[Ref]} keep storage and let-bound names on native types where the design intends a fixed ML shape; \textsf{[Abs]} stays more liberal precisely to model callbacks and other ``native code called with foreign arguments'' scenarios.
+Rules \textsf{[{Let-extern}]} and \textsf{[Ref]} keep storage and let-bound names on native types where the design intends a fixed ML shape; \textsf{[Abs]} stays more liberal precisely to model callbacks and other ``native code called with foreign arguments'' scenarios.
 
 \subsection{No flow-sensitive typing on branches}
 
@@ -298,7 +342,7 @@ It widens what may flow \emph{into} certain forms (e.g.\ \texttt{let} and assign
 This contrasts sharply with \emph{dynamic typing} (e.g.\ Lisp, Python, untyped JavaScript), where a name typically denotes a single runtime slot whose \emph{value} can hold different shapes at different times, and branch tests are often used to decide how to use that value at run time.
 Errors are deferred until an operation fails on the actual tag.
 Here, by contrast, each variable has one compile-time type for the purpose of checking a whole subexpression; \texttt{if} does not fork the static description of the environment.
-The \textsf{extern} boundary adds controlled casts at explicit FFI points; it does not turn the core into a flow-sensitive or dynamically typed regime.
+The \textsf{extern} boundary adds controlled checks at explicit FFI points---$\text{cast}_{\tau}$ on \texttt{let}, application arguments, and assignment (after elaboration), plus the conversion judgment where rules demand it---without a flow-sensitive or dynamically typed core.
 
 \section{Type inference in the presence of \textsf{extern}}
 
@@ -313,20 +357,20 @@ Foreign constants $\phi$ with $\Gamma \vdash \phi : \tau \to \text{extern}$ in t
 
 \subsection{The cast-capable \texttt{let} and missing annotations}
 
-Rule~\textsf{[Let]} is the delicate case for inference.
-It concludes $\Gamma \vdash \texttt{let}\; x{:}\tau_1 = e_1\ \texttt{in}\; e_2 : \tau_2$ when (among other side conditions) either $\Gamma \vdash e_1 : \tau_1$ or $\Gamma \vdash e_1 : \text{extern}$, with $\tau_1$ a \emph{native} type.
+Rule~\textsf{[{Let-extern}]} is the delicate case for inference.
+It concludes $\Gamma \vdash \texttt{let}\; x{:}\tau_1 = e_1\ \texttt{in}\; e_2 : \tau_2$ when $\tau_1$ is native, $\Gamma, x{:}\tau_1 \vdash e_2 : \tau_2$, and $\Gamma \vdash e_1 : \tau_1'$ with $\tau_1' \sim_{\textsf{ext}} \tau_1$.
 
-If the implementer drops the annotation $\tau_1$ and tries to infer it \emph{only} from $e_1$, the situation is underdetermined: from $e_1$ alone one may learn little more than $\Gamma \vdash e_1 : \text{extern}$, which does not fix which native $\tau_1$ the programmer intends for $x$.
-Conversely, inferring $\tau_1$ \emph{only} from uses of $x$ in $e_2$ ignores the possibility that $e_1$ is \textsf{extern} and must be cast at runtime to that $\tau_1$.
-There is no subtyping rule making $\textsf{extern}$ a subtype of $\tau_1$ in this calculus, so one cannot unify $\textsf{extern}$ with arbitrary native $\tau_1$ by subsumption.
+If the implementer drops the annotation $\tau_1$ and tries to infer it \emph{only} from $e_1$, the situation is underdetermined: from $e_1$ alone one may learn only some extern-compatible $\tau_1'$, which does not fix which native $\tau_1$ the programmer intends for $x$.
+Conversely, inferring $\tau_1$ \emph{only} from uses of $x$ in $e_2$ ignores runtime conversion obligations tied to the FFI shape $\tau_1'$.
+There is no subtyping rule making arbitrary $\tau_1'$ a subtype of native $\tau_1$ beyond the $\sim_{\textsf{ext}}$ relation.
 
 The standard way to recover a principal, predictable algorithm is therefore:
 \begin{itemize}
-  \item treat $\tau_1$ on the FFI \texttt{let} as \emph{required} (or generated from a surface \texttt{cast} form with an explicit target type), and
-  \item \emph{check} $e_1$ against the disjunction $\Gamma \vdash e_1 : \tau_1 \lor \Gamma \vdash e_1 : \text{extern}$,
+  \item treat $\tau_1$ on the FFI \texttt{let} as \emph{required} (or generated from a surface $\text{cast}_{\tau_1}$ with an explicit target type), and
+  \item \emph{check} $e_1$ against $\tau_1'$ such that $\tau_1' \sim_{\textsf{ext}} \tau_1$,
 \end{itemize}
 while continuing to \emph{infer} inside $e_2$ as in ordinary ML once $x : \tau_1$ is fixed.
-Equivalently, one adopts \emph{bidirectional} typing at the boundary: the annotation $\tau_1$ is an input (check mode) for $e_1$, and an output (infer mode) for occurrences of $x$ in $e_2$.
+Equivalently, one adopts \emph{bidirectional} typing at the boundary: the annotation $\tau_1$ is an input (check mode) for the cast target, and an output (infer mode) for occurrences of $x$ in $e_2$.
 
 \subsection{References and the native-content constraint}
 
@@ -342,8 +386,8 @@ This note does not fix a generalization policy; it only flags that \textsf{exter
 
 \subsection{Principal types}
 
-In the core fragment without the \textsf{[Let]} disjunct, Hindley--Milner-style inference often yields \emph{principal} types: a most general typing from which all others follow by substitution.
-At the FFI \texttt{let}, the disjunction $\Gamma \vdash e_1 : \tau_1 \lor \Gamma \vdash e_1 : \text{extern}$ means that several native choices of $\tau_1$ can be consistent with different uses unless an annotation fixes $\tau_1$.
+In the core fragment without the FFI \texttt{let}, Hindley--Milner-style inference often yields \emph{principal} types: a most general typing from which all others follow by substitution.
+At \textsf{[{Let-extern}]}, several native choices of $\tau_1$ can be consistent with the same $\tau_1'$ unless an annotation fixes $\tau_1$.
 Thus there may be no single ``best'' $\tau_1$ inferrable from $e_1$ alone without violating the programmer's intended cast.
 Requiring $\tau_1$ at the boundary restores principal behavior \emph{relative} to that annotation: inference proceeds in the rest of the program under a fixed contract.
 
