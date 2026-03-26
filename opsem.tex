@@ -73,6 +73,9 @@ Foreign constants $\phi$ are taken from a fixed global assignment of types (rule
   \frac{\Gamma \vdash e_1 : \tau_1 \to \tau_2 \quad \Gamma \vdash e_2 : \tau_1}{\Gamma \vdash e_1\; e_2 : \tau_2}\,\text{[App]}
 \end{gather*}
 
+The rule for [App] is later on generalized and can be ommited in the case of native types.
+
+
 \begin{gather*}
   \frac{\Gamma \vdash e_1 : \tau_1 \quad \Gamma \vdash e_2 : \tau_2}{\Gamma \vdash (e_1, e_2) : \tau_1 \times \tau_2}\,\text{[Pair]}
   \\[0.75em]
@@ -87,39 +90,39 @@ Foreign constants $\phi$ are taken from a fixed global assignment of types (rule
   \frac{\Gamma \vdash e_1 : \tau\,\text{ref} \quad \Gamma \vdash e_2 : \tau}{\Gamma \vdash e_1 \mathrel{:=} e_2 : \text{unit}}\,\text{[{Assign}]}
 \end{gather*}
 
-References of non-native data types are not inhabited, so the dereference and assignment rules are trivially applicable to such types. Therefore, we do not need to distinguish between native and non-native data types in these rules.
+References of non-native data types are not inhabited, so the dereference and assignment rules are trivially applicable to such types. Therefore, we do not need to distinguish between native and non-native data types in these rules. The assignment rule is later generalized and can be ommited in the case of native types.
 
 \subsection{State and Foreign Typing Rules (extern-aware)}
+\[
+  \frac{}{\Gamma \vdash \phi : \tau\rightarrow\text{extern}}\,\text{[{Foreign-Const}]}
+\]
+Extern typed values can only be produced by foreign functions. They can also be bound to function arguments called by functions in the non-native code.
+
 \begin{gather*}
   \frac{\Gamma \vdash e : \tau \quad \text{$\tau$ is a native type}}{\Gamma \vdash \text{ref}\; e : \tau\,\text{ref}}\,\text{[Ref]}
   \\[0.75em]
-  \frac{\Gamma \vdash e_1 : \tau\,\text{ref} \quad \Gamma \vdash e_2 : \tau' \quad \tau \sim_{\textsf{ext}} \tau'}{\Gamma \vdash e_1 \mathrel{:=}^{\textsf{ext}}_{\tau} e_2 : \text{unit}}\,\text{[{Assign-Extern}]}
-  \\[0.75em]
-  \frac{}{\Gamma \vdash \phi : \tau\rightarrow\text{extern}}\,\text{[{Foreign-Const}]}
+  \frac{\Gamma \vdash e_1 : \tau\,\text{ref} \quad \Gamma \vdash e_2 : \tau' \quad \tau \sim_{\textsf{ext}} \tau'}{\Gamma \vdash e_1 \mathrel{:=} e_2 : \text{unit}}\,\text{[{Assign-Extern}]}
 \end{gather*}
 
 Creating  a reference of a non-native type is disallowed via the type system.
 The assignment operation is only applicable to references of native types, but the assigned values can be non-native and extern-compatible. The assignent operation is semantically a different operation than the assignment operation for native types because it will insert a runtime type check to ensure that the assigned value is compatible with the expected type.
 
-Extern typed values can only be produced by foreign functions. They can also be bound to function arguments called by functions in the non-native code.
-
 \begin{gather*}
-  \frac{\Gamma \vdash e_1 : \tau_1 \quad \Gamma, x{:}\tau_1 \vdash e_2 : \tau_2 \quad \text{$\tau_1$ is a native type}}{\Gamma \vdash \text{let}\; x{:}\tau_1 = e_1\ \text{in}\; e_2 : \tau_2}\,\text{[{Let-Native}]}
-  \\[0.75em]
-  \frac{\Gamma \vdash e_1 : \tau_1^{\text{ext}} \quad \tau_1^{\text{ext}} \sim_{\textsf{ext}} \tau_1 \quad \Gamma, x{:}\tau_1 \vdash e_2 : \tau_2 \quad \text{$\tau_1$ is a native type}}{\Gamma \vdash \text{let}\; x{:}\tau_1 = e_1\ \text{in}\; e_2 : \tau_2}\,\text{[{Let-Extern-Compatible}]}
+  \frac{\Gamma \vdash e_1 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1 \quad \Gamma, x{:}\tau_1 \vdash e_2 : \tau_2 \quad \text{$\tau_1$ is a native type}}{\Gamma \vdash \text{let}\; x{:}\tau_1 = e_1\ \text{in}\; e_2 : \tau_2}\,\text{[{Let-Extern-Compatible}]}
 \end{gather*}
 
 The rule for let ensures that no non-native typed values exist in the body of the let binding. 
 This stops the 'extern' escape hatch from being used to smuggle non-native typed values into the body of the let binding.
+If the bound value is native then the cast is trivial and can be omitted.
 This on-the-fly conversion of non-native to native values can also happen, most generally, in function applications: 
 
 \[
-  \frac{\Gamma \vdash e_1 : \tau_1 \to \tau_2 \quad \Gamma \vdash e_2 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1}{\Gamma \vdash e_1\; e_2 : \tau_2}\,\text{[App-Extern-Compatible]}
+  \frac{\Gamma \vdash e_1 : \tau_1 \to \tau_2 \quad \Gamma \vdash e_2 : \tau_1' \quad \tau_1' \sim_{\textsf{ext}} \tau_1}{\Gamma \vdash e_1\,(e_2) : \tau_2}\,\text{[App-Extern-Compatible]}
 \]
 
-\textbf{Note:} The App-Extern-Compatible rule is a generalization of the App rule that allows for the application of a function to an extern-compatible value, since any native type is trivially extern-compatible to itself.
+The App-Extern-Compatible rule is a generalization of the App rule that allows for the application of a function to an extern-compatible value, since any native type is trivially extern-compatible to itself.
 \[
-  \frac{\Gamma \vdash e : \tau' \quad \tau' \sim_{\textsf{ext}} \tau}{\Gamma \vdash \text{cast}_{\tau}\, e : \tau}\,\text{[Cast-Extern-Compatible]}
+  \frac{\Gamma \vdash e : \tau' \quad \tau' \sim_{\textsf{ext}} \tau \quad \text{$\tau$ is a native type}}{\Gamma \vdash \text{cast}_{\tau}\, e : \tau}\,\text{[Cast-Extern-Compatible]}
 \]
 The extern-compatible typing rules (\textbf{[Let-Extern-Compatible]}, \textbf{[App-Extern-Compatible]}, \textbf{[Assign-Extern]}) are understood as inserting these explicit boundary casts toward the expected native type.
 
@@ -131,18 +134,17 @@ Instead, boundary conversions are made explicit by $\text{cast}_{\tau}\,e$, wher
 \subsection{Administrative Reductions}
 \[
 \begin{aligned}
-  \langle (\lambda x{:}\tau.\, e)\ v, \mu \rangle &\to \langle e[v/x], \mu \rangle \quad (\text{if } v \text{ is already native at } \tau) \\
-  \langle (\lambda x{:}\tau.\, e)\ \text{box}(v, \sigma), \mu \rangle &\to \langle (\lambda x{:}\tau.\, e)\ \text{cast}_{\tau}\, \text{box}(v, \sigma), \mu \rangle \\
+  \langle (\lambda x{:}\tau.\, e)\ v, \mu \rangle &\to \langle e[v'/x], \mu \rangle \quad (\text{if } v \Downarrow_{\tau} v') \\
   \langle \text{ref}\; v, \mu \rangle &\to \langle l, \mu[l \mapsto v] \rangle \quad (l \notin \operatorname{dom}(\mu)) \\
   \langle {!}l, \mu \rangle &\to \langle \mu(l), \mu \rangle \\
-  \langle l \mathrel{:=} v, \mu \rangle &\to \langle (), \mu[l \mapsto v] \rangle \quad (v \neq \text{box}(\ldots)) \\
-  \langle l \mathrel{:=}^{\textsf{ext}}_{\tau} v, \mu \rangle &\to \langle l \mathrel{:=} \text{cast}_{\tau}\, v, \mu \rangle \\
+  \langle l \mathrel{:=} v, \mu \rangle &\to \langle (), \mu[l \mapsto v'] \rangle \quad (\text{if } v \Downarrow v') \\
   \langle \text{if}\; \textsf{true}\ \text{then}\; e_1\ \text{else}\; e_2, \mu \rangle &\to \langle e_1, \mu \rangle \\
   \langle \text{if}\; \textsf{false}\ \text{then}\; e_1\ \text{else}\; e_2, \mu \rangle &\to \langle e_2, \mu \rangle
 \end{aligned}
 \]
 The $\text{ref}$ rule allocates a fresh location; no auxiliary runtime type map is maintained.
-Assignments are split into \textbf{[Assign]} (ordinary native write) and \textbf{[Assign-Extern]} (which first inserts $\text{cast}_{\tau}$ using the expected left-hand-side type).
+
+Note that in application and in assigment, if the argument is of a native type the cast is trivial and can be omitted. 
 
 \subsection{Products and Projections}
 \[
@@ -194,15 +196,17 @@ Cast reduction rules:
 
 Let reduction rules:
 \begin{gather*}
-  \frac{}{ \langle \text{let}\; x{:}\tau = v\ \text{in}\; e_2, \mu \rangle \to \langle e_2[v/x], \mu \rangle}\,\text{[R-Let-Val]}
+  \frac{v \Downarrow_{\tau} v'}{ \langle \text{let}\; x{:}\tau = v\ \text{in}\; e_2, \mu \rangle \to \langle e_2[v'/x], \mu \rangle}\,\text{[R-Let-Val]}
+  \qquad
+  \frac{v \not\Downarrow_{\tau}}{ \langle \text{let}\; x{:}\tau = v\ \text{in}\; e_2, \mu \rangle \to \text{error}}\,\text{[R-Let-Val-Fail]}
   \\[0.75em]
   \frac{\langle e_1, \mu \rangle \to \langle e_1', \mu' \rangle}{\langle \text{let}\; x{:}\tau = e_1\ \text{in}\; e_2, \mu \rangle \to \langle \text{let}\; x{:}\tau = e_1'\ \text{in}\; e_2, \mu' \rangle}\,\text{[R-Let]}
 \end{gather*}
 
-The typing rules \textbf{[Let-Extern-Compatible]}, \textbf{[App-Extern-Compatible]}, and \textbf{[Assign-Extern]} are interpreted by elaboration into explicit casts:
-$\text{let}\; x{:}\tau = \text{cast}_{\tau}(e_1)\ \text{in}\; e_2$,
-$e_1\;(\text{cast}_{\tau_1}(e_2))$,
-and $e_1 := \text{cast}_{\tau}(e_2)$, respectively.
+The boundary forms $\text{let}^{\textsf{ext}}$ and $(\cdot)^{\textsf{ext}}$ in function application, together with \textbf{[Assign-Extern]}, are interpreted by elaboration into explicit casts:
+$\text{let}\; x{:}\tau = \text{cast}_{\tau}(e_1)\ \text{in}\; e_2$ for $\text{let}^{\textsf{ext}}\; x{:}\tau = e_1\ \text{in}\; e_2$,
+$e_1\;(\text{cast}_{\tau_1}(e_2))$ for $e_1\,(e_2)^{\textsf{ext}}$,
+and $e_1 := \text{cast}_{\tau}(e_2)$ for $e_1 \mathrel{:=}^{\textsf{ext}}_{\tau} e_2$.
 
 \subsection{Blame (optional)}
 
