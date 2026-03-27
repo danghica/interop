@@ -397,4 +397,170 @@ Type inference for the native bulk of the language can follow standard algorithm
 \textsf{extern} mainly affects the \emph{algorithmic} story at boundaries: the cast-capable \texttt{let} needs an explicit native target type $\tau_1$ (or an equivalent surface cast), \texttt{ref} must exclude non-native content types, and generalization at \texttt{let} may treat \textsf{extern}-bearing bindings conservatively.
 These choices mirror the declarative intent of the rules: foreign data is admitted only where the static semantics names a native type for the bound name, and runtime checks (when needed) are tied to that name.
 
+\section{Cangjie \textsf{extern} Type Specification}
+\label{sec:cangjie-extern-draft}
+
+This section proposes a complete, plain-language specification shape for adding a core \texttt{extern} type to a Cangjie-like language.
+It is aligned with the official Cangjie documentation portal (\url{https://cangjie-lang.cn/en/docs}) and with the published Cangjie material on generics and multi-paradigm design (\url{https://docs.cangjie-lang.cn/docs/0.53.18/Spec/source_zh_cn/Chapter_09_Generics(zh).html}, \url{https://docs.cangjie-lang.cn/docs/0.53.13/white_paper/source_zh_cn/cj-wp-multiparadigm.html}).
+The intent is to extend that baseline with \texttt{extern} while preserving static predictability, clear diagnostics, and practical interop.
+
+\subsection{Baseline summary from Cangjie specification}
+
+The current Cangjie baseline relevant to this extension is:
+\begin{itemize}
+  \item Generics are available on functions and major type declarations, with \texttt{where} constraints.
+  \item User-defined generic types are invariant.
+  \item Function overloading and generic argument inference are part of call resolution.
+  \item Interface-based and class-based subtype constraints are central to generic checking.
+  \item The language and tooling are specified through an official spec channel and conformance-oriented documentation.
+\end{itemize}
+
+\subsection{Extension objective}
+
+\texttt{extern} is a boundary type for values crossing language or runtime boundaries.
+It is not a replacement for regular static typing.
+Native code may consume \texttt{extern}-compatible values only when a target native type is explicit at that boundary (annotation, explicit type argument, or explicit conversion call).
+Boundary failures are reported at the declared conversion point.
+
+\subsection{Mapping to baseline: compatible, extension, conflict}
+
+\paragraph{Compatible with baseline.}
+\begin{itemize}
+  \item Generic declarations and \texttt{where} syntax remain unchanged.
+  \item Invariance of user-defined generic types remains unchanged.
+  \item Existing overload mechanism remains; this section adds one ranking rule for conversion-requiring candidates.
+\end{itemize}
+
+\paragraph{Extension required.}
+\begin{itemize}
+  \item A new core type constructor: \texttt{extern}.
+  \item Legality rules for placing \texttt{extern} inside generic arguments.
+  \item Boundary conversion API requirements and runtime-failure categories.
+  \item Additional conformance tests for compile-pass, compile-fail, and runtime-fail extern cases.
+\end{itemize}
+
+\paragraph{Potential conflict points to resolve.}
+\begin{itemize}
+  \item Whether \texttt{extern} directly satisfies nominal interface bounds.
+  \item How overload ranking treats candidates that require boundary conversion.
+  \item Whether mutable storage restrictions apply only directly or transitively through nested containers.
+\end{itemize}
+
+\subsection{Normative candidate rules (plain language)}
+
+\paragraph{Rule group A: generic placement.}
+\begin{itemize}
+  \item \texttt{extern} may appear as a generic argument only in declarations marked as boundary-capable by the standard library or by an implementation-defined interop annotation.
+  \item In non-boundary generic APIs, \texttt{extern} as a type argument is rejected at compile time.
+  \item Nested appearances (for example, \texttt{Array<Box<extern>>}) follow the same rule recursively.
+\end{itemize}
+
+\paragraph{Rule group B: constrained generics.}
+\begin{itemize}
+  \item \texttt{extern} does not satisfy nominal interface bounds by default.
+  \item To use constrained APIs, callers convert boundary values to a native constrained type before the constrained call.
+  \item Implementations may provide explicit adapter traits, but this is opt-in and never implicit.
+\end{itemize}
+
+\paragraph{Rule group C: inference and overloading.}
+\begin{itemize}
+  \item If a call involving \texttt{extern} leaves multiple valid native targets, the call is ambiguous unless the program provides explicit type arguments or explicit target annotation.
+  \item During overload resolution, candidates requiring boundary conversion are ranked after candidates that type-check without conversion.
+\end{itemize}
+
+\paragraph{Rule group D: mutable state safety.}
+\begin{itemize}
+  \item Mutable storage of types containing \texttt{extern} is disallowed transitively in ordinary modules.
+  \item Boundary modules may opt in with explicit annotation, and then must perform explicit conversion at read or write points.
+\end{itemize}
+
+\paragraph{Rule group E: diagnostics contract.}
+\begin{itemize}
+  \item Static errors: illegal placement, unsatisfied constraints, ambiguous inference.
+  \item Runtime errors: explicit boundary conversion failure.
+  \item Implementations may vary message text, but category and source location of boundary failures must be stable.
+\end{itemize}
+
+\subsection{Cangjie examples for conformance}
+
+\paragraph{Compile-pass: explicit conversion before constrained generic call.}
+\begin{verbatim}
+interface Comparable<T> {
+    func compare(other: T): Int64
+}
+
+func pickMax<T>(a: T, b: T): T where T <: Comparable<T> {
+    return if (a.compare(b) >= 0) a else b
+}
+
+func fromBoundary(x: extern): Int64 {
+    let n: Int64 = Interop.toInt64(x)
+    return pickMax<Int64>(n, 10)
+}
+\end{verbatim}
+
+\paragraph{Compile-fail: extern used in non-boundary generic position.}
+\begin{verbatim}
+class Box<T>(let value: T)
+
+func bad(raw: extern) {
+    let b: Box<extern> = Box<extern>(raw) // compile error in ordinary module
+}
+\end{verbatim}
+
+\paragraph{Compile-fail: constrained generic without prior conversion.}
+\begin{verbatim}
+interface Hashable<T> {
+    func hashCode(): Int64
+}
+
+func hashOne<T>(x: T): Int64 where T <: Hashable<T> {
+    return x.hashCode()
+}
+
+func bad2(raw: extern): Int64 {
+    return hashOne(raw) // compile error: extern does not satisfy bound
+}
+\end{verbatim}
+
+\paragraph{Runtime-fail: explicit boundary conversion failure.}
+\begin{verbatim}
+func parseInt(raw: extern): Int64 {
+    return Interop.toInt64(raw) // runtime error if raw is not integer-compatible
+}
+\end{verbatim}
+
+\subsection{Open decisions and defaults}
+
+The ML-like baseline does not uniquely fix the following Cangjie-level details.
+This section chooses defaults and records alternatives.
+
+\begin{itemize}
+  \item \textbf{Nominal constraints default:} \texttt{extern} does not satisfy nominal bounds directly. \emph{Alternative:} marker-interface opt-in.
+  \item \textbf{Overload ranking default:} no-conversion candidates win over conversion-requiring candidates. \emph{Alternative:} equal ranking with ambiguity errors.
+  \item \textbf{Storage safety default:} transitive restriction for mutable storage. \emph{Alternative:} direct-only restriction.
+  \item \textbf{Instantiation default:} keep ordinary generic specialization behavior; do not generate specialization variants only to model conversion outcomes. \emph{Alternative:} partial sharing for extern-bearing instantiations.
+  \item \textbf{Diagnostics default:} error categories and source locations are normative; exact text is implementation-defined.
+\end{itemize}
+
+\subsection{Completeness audit checklist}
+
+This section is complete with respect to:
+\begin{itemize}
+  \item \textbf{Spec surface:} grammar placement policy, generic constraints, overload/inference effects, and mutable-state policy.
+  \item \textbf{Behavior:} compile-pass, compile-fail, and runtime-fail categories.
+  \item \textbf{Interop:} explicit relation between core \texttt{extern} and boundary conversion APIs.
+  \item \textbf{Risk model:} soundness, performance/code-size, and ergonomics tradeoffs are addressed by defaults and alternatives.
+  \item \textbf{Conformance:} concrete Cangjie examples are included for each required case.
+\end{itemize}
+
+\subsection{Recommended placement in a full language spec}
+
+For a production Cangjie specification, this material should appear as:
+\begin{itemize}
+  \item a normative chapter on \texttt{extern} type placement and generic interaction,
+  \item a normative chapter on boundary conversion APIs and failure behavior,
+  \item a conformance appendix containing compile-pass, compile-fail, and runtime-fail extern tests.
+\end{itemize}
+
 \end{document}
