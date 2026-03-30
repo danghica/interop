@@ -26,15 +26,14 @@ However, if an expression has `Extern` type it can be cast into a mutable or imm
 let x: Int32 = e1
 var y: Int32 = e1
 y = e2
-let z = (Bool)e1
+let z = e1 as Bool
 ```
 
 Although legal, these expressions may produce a runtime error if the actual raw external data cannot be converted to the stipulate Cangjie type. 
 
 If a non-native type and a native type differ only in that some data types are replaced with `Extern` the non-native type is said to be *extern-compatible* to the native type. For instance `(Bool, Extern)` is extern-compatible to `(Bool, Int32)`, `(Bool, Bool)` or `(Bool, (Bool, Int32))`. The type `Extern` itself is extern-compatible to any native type.    
 
-The illegal and legal examples above generalize to types that are not extern-compatible and types which are extern-compatible, respectively. Suppose that `e` is an expressions
- that has type `(Extern, Bool)`. 
+The illegal and legal examples above generalize to types that are not extern-compatible and types which are extern-compatible, respectively. Suppose that `e` is an expressions that has type `(Extern, Bool)`. 
 
 The following expressions give a compile error because they have types which are not extern-compatible to `(Extern, Bool)`: 
 ```[cangjie]
@@ -55,11 +54,11 @@ z = e
 
 > **Optional**
 > In general, whenever a Cangjie expression forces the type of a subexpression to be T and T' is an extern-compatible non-native type, an expression E of type T' can be used as such a subexpression. For instance the operator `&&` requires both operands to be `Bool`, therefore if `e1` and `e2` have type `Bool` or `Extern` then the expression `e1 && e2` is legal. 
-> If an expression does not unambiguously determine the type of a subexpression then a cast is required. For instance, if `e1` , `e2` are `Extern` then `e1 + e2` will produce a compile-time error, whereas `(Int32)e1 + (Int32)e2` will be acceptable. 
+> If an expression does not unambiguously determine the type of a subexpression then a cast is required. For instance, if `e1` , `e2` are `Extern` then `e1 + e2` will produce a compile-time error. 
 > Here the concept of 'unambiguous' is to be strictly construed, i.e. no disambiguation mechanisms are required to uniquely determine the type. 
 > This may require strengthening Cangjie type inference so it may be unacceptable. 
 
-Redundant typecasts are allowed. For instance, in the example above `(Bool)e1 && (Bool)e2` is allowed. 
+Redundant typecasts are allowed. For instance, in the example above `let z :Option<Bool> = e as Bool` is allowed. 
 
 **Note:** To be added to functions and to generics that `Extern` can be used, e.g. in the identity function or as an instance of generics if no further problems occure. Check the feasability of runtime checks for boxed generics. Also think about whether function types are native or not. 
 
