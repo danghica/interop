@@ -125,6 +125,29 @@ Runtime boundary checks happen at explicit conversion calls from `extern` to a n
 
 Given the same input value and target type, conversion success or failure must be deterministic in a given runtime profile.
 
+### 6.4 Safety Property
+
+This extension defines **type safety with explicit boundary failure**.
+
+For any closed, well-typed program `P` whose declared result type is native, and for any well-typed initial runtime state, every maximal execution of `P` has exactly one outcome:
+
+1. **Divergence:** execution does not terminate.
+2. **Successful completion:** execution terminates with a value compatible with the declared native result type.
+3. **Boundary failure:** execution terminates with a boundary-conversion runtime error, and the failing step is one of the declared boundary checks:
+   - explicit conversion from `extern` to a native target type,
+   - conversion required by a boundary `let`-style binding,
+   - conversion required before writing into mutable storage constrained to a native type.
+
+Equivalent stuck-state form:
+
+- A well-typed program does not get stuck in any unclassified state.
+- If execution reaches a non-reducible non-value state, that state must be a declared boundary-conversion failure.
+
+Implications for implementers:
+
+- Safety does **not** mean "no runtime errors"; it means runtime errors are restricted to explicit boundary contracts.
+- Native code paths that do not cross an `extern` conversion boundary preserve ordinary static guarantees.
+
 ## 7. Diagnostics Contract
 
 ### 7.1 Compile-Time Errors

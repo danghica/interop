@@ -1,17 +1,36 @@
 # Cangjie `Extern` type
 
-# Lexical 
- * New keyword: `Extern`
+This document specifies a proposed extension to the Cangjie type system to handle interoperability with dynamic languages, in particular ArkTS but also JavaScript, Python, etc. 
+
+# Lexical
+
+- New proposed keyword: `Extern`
 
 # Types
-* New type: `Extern`
 
-## Extern 
-`Extern` is a special type given to values which are not produced by a Cangjie expression, but are created by code written in another programming language. This can happen either when a foreign function is called by a Cangjie program, case in which it is its return type, or when a Cangjie function is called by a foreign context, case in which it is an argument type. Cangjie programs can propagate extern values but cannot read such values. In order to read them the values need to be first cast to Cangjie type. This cast may lead to a runtime error. 
+- New proposed type: `Extern`
 
-Any Cangjie type that has no `Extern` component is said to be *native*. Any Cangjie type that has an `Extern` component is said to be *non-native*. For example the following types are non-native: `(Bool, Extern)` , `Array<Extern>`, `Option<Array<Extern>>`.
+## Extern
 
-It is illegal to create any variables (mutable or immutable) of non-native type. The following example with generate compile-time errors: 
+`Extern` is a special type given to values which originate in foreign code. This can happen in the following situations:
+
+- Cangjie code calls a foreign function, which can return a value of `Extern` type.
+- Foreign code calls a Cangjie function, which can bind the arguments of the latter to `Extern`.
+
+Cangjie programs can propagate extern values as *unopened envelopes* but cannot examine such values, so the following is prohibited:
+
+- use in a condition (if statement)
+- field access
+- arithmetic
+- pattern matching etc.
+
+In order to enable these operations, extern values need to be first implicitly or explicitly cast to Cangjie type. This cast may lead to a runtime error if the raw extern type cannot be convereted to the desired Cangjie type. 
+
+Informally, any Cangjie data type that does not use `Extern` in its definition is said to be *native*. Any Cangjie data type that uses `Extern` is said to be *non-native*. For example the following types are non-native: `(Bool, Extern)`, `Array<Extern>`, `Option<Array<Extern>>`. But function types are always considered to be *native*, including when its parameter or result types mention `Extern` (for example `Extern -> Int32`, `(Int32, Int32) -> Extern`). 
+
+Binding declarations for variables and fields must have *native* types (native data or any function type). Function *signatures* may still use non-native data in parameters and results.
+
+The following examples will generate compile-time errors: 
 
 ```[cangjie]
 let x: Extern = e            // illegal even if expression e has Extern type
@@ -20,22 +39,61 @@ let z: (Extern, Int32) = e   // illegal because the variable type is non-native
 let w = e                    // illegal because the type of w is inferred as Extern
 ```
 
-However, if an expression has `Extern` type it can be cast into a mutable or immutable variable. It can also be assigned to a mutable variable. If `e1`, `e2` are expressions of type `Extern` the following are legal: 
+> **Observation**. This restriction may not be vital. I think the upcast/downcast restriction is the vital one. 
 
-```[cangjie]
-let x: Int32 = e1
-var y: Int32 = e1
-y = e2
-let z = e1 as Bool
+It is legal for function parameters to have non-native types, and also for functions to return non-native types. For instance the identity function works on extern values:
+
+```cangjie
+func id(x : Extern) : Extern  { return x }
 ```
 
-Although legal, these expressions may produce a runtime error if the actual raw external data cannot be converted to the stipulate Cangjie type. 
+If an expression has `Extern` type it can be implicitly cast into a mutable or immutable variable during declaration; it can also be assigned to a mutable variable; it can also be explicitly cast. If `e` is an expression of type `Extern` the following are legal: 
 
-If a non-native type and a native type differ only in that some data types are replaced with `Extern` the non-native type is said to be *extern-compatible* to the native type. For instance `(Bool, Extern)` is extern-compatible to `(Bool, Int32)`, `(Bool, Bool)` or `(Bool, (Bool, Int32))`. The type `Extern` itself is extern-compatible to any native type.    
+```[cangjie]
+let x: Int32 = e
+var y: Int32 = e
+y = e                // y is already declared as Int32
+let z = e as Bool    // z will receive type Option<Bool>
+```
+
+Although legal, these expressions may produce a runtime error if the actual raw external data cannot be converted to the target native Cangjie type expected in that context. 
+
+If a non-native data type and a native data type have the same outer shape except that some sub-trees (in the definition, syntactically) are just `Extern` on the left and native on the right, the left is said to be *extern-compatible* to the right; formally `T' ~ext T` as below. For instance `(Bool, Extern)` is extern-compatible to `(Bool, Int32)` and to `(Bool, Bool)`; it is also extern-compatible to `(Bool, (Bool, Int32))` because `Extern` (leaf) is extern-compatible to the sub-tree `(Bool, Bool)`. Top-level `Extern` is compatible with any native data type (`Extern ~ext T` for native data `T`).
+
+Formally, `~ext` is the least relation on data types generated by (right-hand side always native data):
+
+- **Universal replacement:** `Extern ~ext B` for every native data type `B`.
+- **Reflexivity on native data types:** if `T` is native data, then `T ~ext T`.
+- **Generic data-type constructors:** for every data-type constructor `C` admitted by the type system, if `Ai ~ext Bi` for all type arguments, then `C<A1, ..., An> ~ext C<B1, ..., Bn>`.
+
+The universal replacement rule models a raw foreign value that may decode to any native data shape at a boundary, including composite. 
+
+Treating all function types as native does not weaken safety: boundary failures remain confined to explicit conversion sites (casts, extern-compatible bindings and assignments for *data*, and the usual checks at *application* when a parameter or result type mentions `Extern`). The predicate “native” for storage is separate from “contains no `Extern` anywhere”; only the latter would characterize “purely foreign-free” types, which this spec does not use as the storage rule.
+
+Examples:
+
+```cangjie
+Extern ~ext Bool                          // true
+Extern ~ext (Bool, Bool)                  // true
+(Extern, Bool) ~ext (Bool, Bool)          // true
+(Extern, Bool) ~ext (Bool, (Bool, Bool))  // false
+(Extern, Bool) ~ext (Int32, Int32)        // false
+```
 
 The illegal and legal examples above generalize to types that are not extern-compatible and types which are extern-compatible, respectively. Suppose that `e` is an expressions that has type `(Extern, Bool)`. 
 
+Redundant typecasts are allowed. For instance, in the example above `let z :Option<Bool> = e as Bool` is allowed. 
+
+A non-native data type may never be used in a type-cast. For instance the following expressions will produce syntax errors:
+
+```cangjie
+e as Extern 
+e as (Bool, Extern)
+e as Array<Extern>
+```
+
 The following expressions give a compile error because they have types which are not extern-compatible to `(Extern, Bool)`: 
+
 ```[cangjie]
 let x: Int32 = e           // illegal 
 var y: (Bool, Int32) = e   // illegal 
@@ -44,6 +102,7 @@ z = e                      // illegal
 ```
 
 The following expressions are correct: 
+
 ```[cangjie]
 let x: (Int32, Bool) = e           
 var y: ((Bool, Bool), Bool) = e   
@@ -51,18 +110,30 @@ var z: (Bool, Bool)
 z = e                      
 ```
 
-
-> **Optional**
+> **Design option**
 > In general, whenever a Cangjie expression forces the type of a subexpression to be T and T' is an extern-compatible non-native type, an expression E of type T' can be used as such a subexpression. For instance the operator `&&` requires both operands to be `Bool`, therefore if `e1` and `e2` have type `Bool` or `Extern` then the expression `e1 && e2` is legal. 
 > If an expression does not unambiguously determine the type of a subexpression then a cast is required. For instance, if `e1` , `e2` are `Extern` then `e1 + e2` will produce a compile-time error. 
-> Here the concept of 'unambiguous' is to be strictly construed, i.e. no disambiguation mechanisms are required to uniquely determine the type. 
+> Here the concept of 'unambiguous' means no disambiguation mechanisms are required to uniquely determine the type after type inference. 
 > This may require strengthening Cangjie type inference so it may be unacceptable. 
 
-Redundant typecasts are allowed. For instance, in the example above `let z :Option<Bool> = e as Bool` is allowed. 
+**Note:** Check the feasability of runtime checks for boxed generics. 
 
-**Note:** To be added to functions and to generics that `Extern` can be used, e.g. in the identity function or as an instance of generics if no further problems occure. Check the feasability of runtime checks for boxed generics. Also think about whether function types are native or not. 
+# Safety property
 
-# Design rationale
+Type safety with explicit boundary failure:
+
+For any Cangjie program (closed, well-typed) every maximal execution has exactly one of the following outcomes:
+
+1. The execution diverges.
+2. The execution terminates with a value compatible with the declared native result type.
+3. The execution terminates with a runtime boundary-conversion error at an explicit extern-to-native boundary (for example, cast/conversion, extern-compatible binding to a native *data* type, extern-compatible assignment to native mutable storage, or a failed check when passing or returning values at a function boundary whose parameter or result type mentions `Extern`).
+
+Equivalent stuck-state formulation:
+
+- A well-typed program cannot get stuck in an unclassified state.
+- If execution reaches a non-reducible non-value state, that state is a declared boundary-conversion failure.
+
+# Design rationale
 
 The language design above will replace the following style of interop with ArkTS:
 
@@ -86,7 +157,7 @@ let result: Int32 = api.Add(2, 3)
 
 Unlike the usual `dynamic` type used by C# which supresses type inference with dangerous consequences, the Cangjie approach: 
 
-* cannot camouflage a badly-typed program 
-* cannot replace normal type inference 
-* cannot be used as a hack for flow-sensitive typing
+- cannot camouflage a badly-typed program 
+- cannot replace normal type inference 
+- cannot be used as a hack for flow-sensitive typing
 

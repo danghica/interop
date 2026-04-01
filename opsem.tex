@@ -243,6 +243,108 @@ Let reduction rules:
   \frac{\langle e_1, \mu \rangle \to \langle e_1', \mu' \rangle}{\langle \text{let}\; x{:}\tau = e_1\ \text{in}\; e_2, \mu \rangle \to \langle \text{let}\; x{:}\tau = e_1'\ \text{in}\; e_2, \mu' \rangle}\,\text{[R-Let]}
 \end{gather*}
 
+\subsection{Safety}
+
+\paragraph{Theorem (Safety with explicit boundary failure).}
+Let $e$ be closed and let $\tau$ be native such that
+\[
+  \emptyset \vdash e : \tau .
+\]
+For every well-typed initial store $\mu_0$, exactly one of the following holds:
+\[
+\begin{array}{ll}
+\textnormal{(i)} & \langle e,\mu_0\rangle \to^\omega \quad \textnormal{(divergence)}, \\[0.35em]
+\textnormal{(ii)} & \exists \mu, v, v'.\ \langle e,\mu_0\rangle \to^* \langle v,\mu\rangle \ \wedge\ v \Downarrow_{\tau} v', \\[0.35em]
+\textnormal{(iii)} & \exists e_b,\mu_b,\tau_b,v_b.\ \langle e,\mu_0\rangle \to^* \langle e_b,\mu_b\rangle \ \wedge \\
+& \qquad\Big(
+e_b = \text{cast}_{\tau_b}\,v_b \ \wedge\ v_b \not\Downarrow_{\tau_b}
+\ \ \lor \\[0.2em]
+& \qquad\ \ e_b = \text{let}\;x{:}\tau_b = v_b\ \text{in}\;e_2 \ \wedge\ v_b \not\Downarrow_{\tau_b}
+\ \ \lor \\[0.2em]
+& \qquad\ \ e_b = l \mathrel{:=} v_b \ \wedge\ v_b \not\Downarrow_{\tau_b}
+\Big)
+\end{array}
+\]
+and in case \textnormal{(iii)} the next step is $\langle e_b,\mu_b\rangle \to \text{error}$.
+
+\paragraph{Corollary (No unclassified stuck states).}
+If $\langle e,\mu_0\rangle \to^* \langle e',\mu'\rangle$ and $\langle e',\mu'\rangle \not\to$, then either $e'$ is a value or $\langle e',\mu'\rangle=\text{error}$ arising from one of the boundary forms in \textnormal{(iii)}.
+
+\paragraph{Proof.}
+We prove the theorem by the standard decomposition into progress and preservation, adapted to explicit boundary failure.
+
+\medskip
+\noindent\textbf{Store typing.}
+Write $\Sigma \vdash \mu$ for a store typing relation and $\Sigma \vdash \langle e,\mu\rangle : \tau$ as shorthand for $\Sigma \vdash \mu$ and $\emptyset;\Sigma \vdash e:\tau$.
+Assume the usual lookup and update lemmas for $\Sigma$ and $\mu$.
+
+\medskip
+\noindent\textbf{Lemma 1 (Canonical forms).}
+If $\emptyset;\Sigma \vdash v:\tau$, then $v$ has the canonical shape for $\tau$:
+unit/bool/int constants for base types, pairs for products, locations for refs, lambdas for arrows, and foreign constants/boxed values only in shapes admitted by the conversion judgment $v\Downarrow_{\tau}v'$.
+
+\medskip
+\noindent\textbf{Lemma 2 (Progress with boundary classification).}
+If $\emptyset;\Sigma \vdash e:\tau$ and $\Sigma \vdash \mu$, then exactly one of:
+\[
+\text{(a) } e \text{ is a value},\qquad
+\text{(b) } \exists e',\mu'.\ \langle e,\mu\rangle\to\langle e',\mu'\rangle,\qquad
+\text{(c) } e \in \mathcal{B}_{\textnormal{fail}},
+\]
+where
+\[
+\mathcal{B}_{\textnormal{fail}}
+=
+\left\{
+\text{cast}_{\tau_b}v_b \mid v_b\not\Downarrow_{\tau_b}
+\right\}
+\cup
+\left\{
+\text{let}\;x{:}\tau_b=v_b\ \text{in}\;e_2 \mid v_b\not\Downarrow_{\tau_b}
+\right\}
+\cup
+\left\{
+l:=v_b \mid v_b\not\Downarrow_{\tau_b}
+\right\}.
+\]
+Moreover, each $e\in\mathcal{B}_{\textnormal{fail}}$ steps in one rule to $\text{error}$ by \textsf{[R-Cast-Fail]}, \textsf{[R-Let-Val-Fail]}, or the failing assignment conversion premise.
+
+\emph{Proof sketch.}
+By induction on the typing derivation of $e$.
+All core constructors follow standard call-by-value progress using evaluation-context rules.
+The only non-value normal forms arise when conversion premises are required and fail ($v\not\Downarrow_{\tau}$), which are exactly the three sets above.
+No other typing rule introduces a stuck redex.
+
+\medskip
+\noindent\textbf{Lemma 3 (Preservation).}
+If $\emptyset;\Sigma \vdash e:\tau$, $\Sigma\vdash\mu$, and
+\[
+\langle e,\mu\rangle\to\langle e',\mu'\rangle,
+\]
+then there exists $\Sigma'\supseteq\Sigma$ such that
+\[
+\emptyset;\Sigma' \vdash e':\tau
+\quad\text{and}\quad
+\Sigma' \vdash \mu'.
+\]
+
+\emph{Proof sketch.}
+By induction on the reduction rule used.
+Standard cases (\textsf{[R-App-L/R]}, \textsf{[R-If]}, pair/projection, ref/deref) are routine.
+For administrative $\beta$- and assignment-steps, use substitution and conversion premises $v\Downarrow_{\tau}v'$ to recover the expected native type.
+For cast success, typing follows from \textsf{[Cast-Extern-Compatible]} and the conversion clause.
+Failing boundary rules step to $\text{error}$ and are excluded from preservation of term typing, matching the theorem's third outcome.
+
+\medskip
+\noindent\textbf{Derivation of the theorem.}
+Fix $\emptyset\vdash e:\tau$ and well-typed $\mu_0$.
+Iterate Lemma 2 along a maximal reduction sequence.
+If reduction never ends, obtain (i).
+If it ends at a value, use Lemma 1 and the typing invariant from Lemma 3 to obtain (ii), i.e.\ compatibility with $\tau$ via some $v'$.
+If it ends at a non-value normal form, Lemma 2 forces membership in $\mathcal{B}_{\textnormal{fail}}$, yielding (iii), and the one-step transition to $\text{error}$ follows by construction.
+Mutual exclusivity of (i)--(iii) is immediate from determinism of one-step reduction on non-error configurations.
+\hfill$\square$
+
 \subsection{Blame (optional)}
 
 The rules above reduce mismatches at the FFI boundary to $\text{error}$ without saying \emph{which} party violated the agreement.
