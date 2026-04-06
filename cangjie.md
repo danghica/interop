@@ -2,6 +2,8 @@
 
 **Status.** This document is a **language design proposal**: the core `Extern` type described here is **not** part of current shipping Cangjie. Sections that refer to **built-in `Any`** or tooling describe **today’s** Cangjie unless marked otherwise.
 
+In the sequel by *foreign* code we mean code in a dynamically or weakly typed language such as ArkTS, JavaScript, Python, etc. The current proposal does not address interoperability with C and Java which already receive specific support in the Cangjie specification. 
+
 # Design rationale
 
 The language design **in this document** will replace the following style of interop with ArkTS. The left-hand snippet is **illustrative pseudocode** (not a single guaranteed API shape):
@@ -21,13 +23,25 @@ let result = addF.call(args, thisArg: receiver)
 To this new style:
 
 ```cangjie
-// the type of api.Add() : (Int32, Int32) -> Extern
+// declaring an external API class
+external Class API { ...
+  func Add(x: Int32, y: Int32) : Extern
+...
+}
+ 
+// use of an external function of the API 
 let result: Int32 = api.Add(2, 3)
 ```
 
 # Lexical
 
-- New proposed keyword: `Extern`
+- New proposed keywords: `external`,`Extern`
+
+# Class and function modifier
+
+The keyword `external` can be used as a modifier for `func`, `class` or to mark a piece of code indicating that it consists of declarations of external code, similar to `foreign`. 
+
+Unlike C functions `external` functions do not need to be called in an `unsafe` block (TBC). 
 
 # Types
 
@@ -47,11 +61,27 @@ Cangjie programs can **propagate** extern values as *unopened envelopes* (pass t
 - **Arithmetic and user-defined operators** whose parameters are not extern-compatible with the operand types required by the operator.
 - **Pattern matching** that inspects `Extern` or non-native structure beyond what the type system allows at boundaries.
 
-Operations that only **forward** an `Extern` (function call, return, assignment into a slot that type-checks via extern-compatible conversion to a **native** type) are **propagation**, not **elimination**, in this sense.
+Operations that only **forward** an `Extern` (function call and return) are **propagation**, not **elimination**, in this sense.
 
 In order to enable eliminated use, extern values must first be **implicitly** or **explicitly** converted to a native Cangjie type at the boundary. That conversion may fail at **runtime** if the foreign value cannot match the target type.
 
-Informally, any Cangjie **data** type that does not use `Extern` in its definition is said to be *native*. Any Cangjie **data** type that uses `Extern` is said to be *non-native*. For example the following types are non-native: `(Bool, Extern)`, `Array<Extern>`, `Option<Array<Extern>>`. **Function types are always native** (for binding and storage), including when parameter or result types mention `Extern` (for example `Extern -> Int32`, `(Int32, Int32) -> Extern`). A field or variable whose declared type is a **function** type—say `(Extern) -> Extern`—is therefore allowed, because that declared type is native even though it mentions `Extern` inside the function type.
+Informally, any Cangjie **data** type that does not use `Extern` in its definition is said to be *native*. 
+
+Any Cangjie **data** type that uses `Extern` is said to be *non-native*. 
+
+For example the following types are non-native: 
+
+- `(Bool, Extern)`, 
+- `Array<Extern>`, 
+- `Option<Array<Extern>>`.
+
+**Function types are always native**, including when parameter or result types mention `Extern`. For example:
+
+- `Extern -> Int32`,
+
+*`(Int32, Int32) -> Extern`). 
+
+A field or variable whose declared type is a **function** type, say `(Extern) -> Extern`, is therefore allowed, because that declared type is native even though it mentions `Extern` inside the function type.
 
 Binding declarations for variables and fields must have *native* types (native data or any function type). Function *signatures* may still use non-native **data** in parameters and results.
 
@@ -60,8 +90,8 @@ The following examples produce **type errors** (compile time):
 ```cangjie
 let x: Extern = e            // illegal even if expression e has Extern type
 var y: Extern                // illegal even if y is left uninitialized
-let z: (Extern, Int32) = e   // illegal because the variable type is non-native
-let w = e                    // illegal because the type of w is inferred as Extern
+let z: (Extern, Int32) = e   // illegal, variable type non-native
+let w = e                    // illegal, type of w is inferred as Extern
 ```
 
 It is legal for function parameters to have non-native types, and also for functions to return non-native types. For instance the identity function works on extern values:
@@ -94,16 +124,16 @@ When a parameter has type `Array<Extern>` (or another non-native aggregate allow
 When foreign code owns a mutable buffer typed as `Array<Extern>` (or similar), updates that would require an illegal assignment in Cangjie may be performed by a **foreign** entry point that the implementation provides or that the user declares, for example:
 
 ```cangjie
-// Declared with `foreign` (or equivalent); not implemented in Cangjie.
+// Declared with external; not implemented in Cangjie.
 // Writes one element; semantics and threading are implementation-defined.
-foreign func assignExternAt(a: Array<Extern>, i: Int64, v: Extern): Unit
+external func assignExternAt(a: Array<Extern>, i: Int64, v: Extern): Unit
 
 func foo(x: Array<Extern>, y: Extern): Unit {
     assignExternAt(x, 0, y)
 }
 ```
 
-**Contract (informal):** the foreign implementation performs the write on the object bound to `x`; Cangjie’s type system does not model side effects on the `Extern` payload beyond acknowledging the call as an **FFI boundary**. Any number of similar `foreign` mutators are allowed under the same pattern.
+**Contract (informal):** the external implementation performs the write on the object bound to `x`; Cangjie’s type system does not model side effects on the `Extern` payload beyond acknowledging the call as an **FFI boundary**. Any number of similar `foreign` mutators are allowed under the same pattern. This should also be more efficient, since the external data associated to `x` does not have to traverse the FFI boundary. 
 
 If an expression has `Extern` type it can be **implicitly** converted when bound to a variable or assignee whose type is a **native** type **extern-compatible** with `Extern`; it can be **explicitly** cast with `as`. If `e1` is an expression of type `Extern`, the following are legal:
 
@@ -118,9 +148,13 @@ A **redundant** explicit cast is one where the target type is already uniquely d
 
 Although legal, these forms may **fail at runtime** at the boundary if the foreign value does not convert to the target native type.
 
-If a non-native data type and a native data type have the same outer shape except that some sub-trees (in the definition, syntactically) are just `Extern` on the left and native on the right, the left is said to be *extern-compatible* to the right; formally `T' ~ext T` as below. For instance `(Bool, Extern)` is extern-compatible to `(Bool, Int32)` and to `(Bool, Bool)`; it is also extern-compatible to `(Bool, (Bool, Int32))` because `Extern` (leaf) is extern-compatible to the sub-tree `(Bool, Bool)`. Top-level `Extern` is compatible with any native data type (`Extern ~ext T` for native data `T`).
+If a non-native data type and a native data type have the same outer shape except that some sub-trees (in the definition, syntactically) are just `Extern` on the left and native on the right, the left is said to be *extern-compatible* to the right; formally `T' ~ext T` as below. For instance:
 
-**Subtyping.** Extern-compatibility `~ext` is **not** Cangjie subtyping (`<:`). In general neither `Extern <: Int32` nor `Int32 <: Extern` holds. Conversions use `**~ext`** and explicit rules at bindings, assignments, casts, and calls—not the ordinary subtype lattice. That avoids confusing `Extern` with a universal supertype or with `Any`.
+- `(Bool, Extern)` is extern-compatible to `(Bool, Int32)` and to `(Bool, Bool)`;
+- it is also extern-compatible to `(Bool, (Bool, Int32))` because `Extern` (leaf) is extern-compatible to the sub-tree `(Bool, Bool)`. 
+- Top-level `Extern` is compatible with any native data type (`Extern ~ext T` for native data `T`).
+
+**Subtyping.** Extern-compatibility `~ext` is **not** Cangjie subtyping (`<:`). In general neither `Extern <: Int32` nor `Int32 <: Extern` holds. Conversions use `~ext` and explicit rules at bindings, assignments, casts, and calls, not the ordinary subtype lattice. That avoids confusing `Extern` with a universal supertype or with `Any`.
 
 Formally, `~ext` is the least relation on data types generated by (right-hand side always native data):
 
@@ -142,7 +176,7 @@ Extern ~ext (Bool, Bool)                  // true
 (Extern, Bool) ~ext (Int32, Int32)        // false
 ```
 
-The illegal and legal examples below generalize to types that are not extern-compatible and types which are extern-compatible, respectively. Suppose that `e` is an expression of type `(Extern, Bool)`. A cast to `Bool` is **not** justified by `~ext` on the tuple as a whole; use conversion at a **native** target shape that is extern-compatible (for example bind to `(Int32, Bool)` or convert the first component after a separate rule for projection, if the language adds one). For illustration of `**as` on plain `Extern`**, let `e1` be of type `Extern`; then `let z: Option<Bool> = e1 as Bool` is legal. A redundant explicit cast repeats the same boundary check (e.g. `e1 as Bool` when context already forces conversion to `Bool`).
+The illegal and legal examples below generalize to types that are not extern-compatible and types which are extern-compatible, respectively. Suppose that `e` is an expression of type `(Extern, Bool)`. A cast to `Bool` is **not** justified by `~ext` on the tuple as a whole; use conversion at a **native** target shape that is extern-compatible (for example bind to `(Int32, Bool)` or convert the first component after a separate rule for projection, if the language adds one). For illustration of `as` on plain `Extern`, let `e1` be of type `Extern`; then `let z: Option<Bool> = e1 as Bool` is legal. A redundant explicit cast repeats the same boundary check (e.g. `e1 as Bool` when context already forces conversion to `Bool`).
 
 A non-native data type may never appear as the **target** of a type cast. For instance the following are **type errors** (or rejected forms), not parse errors:
 
@@ -172,7 +206,7 @@ z = e
 
 ## Rejected alternative (not in this spec)
 
-An earlier **design option** allowed contexts that **force** a unique native type—such as `&&` requiring `Bool`—to accept operands of type `Extern` alongside `Bool`, so that `e1 && e2` might type-check when both are `Extern`. That **conflicts** with the normative rule that **direct boolean elimination** (including short-circuit operators whose result is `Bool`) requires proper conversion, and it would complicate inference (what if both operands are `Extern` but the intended conversion differs?). **This document does not adopt that option.**
+An earlier **design option** allowed contexts that **force** a unique native type, such as `&&` requiring `Bool`, to accept operands of type `Extern` alongside `Bool`, so that `e1 && e2` might type-check when both are `Extern`. That **conflicts** with the normative rule that **direct boolean elimination** (including short-circuit operators whose result is `Bool`) requires proper conversion, and it would complicate inference (what if both operands are `Extern` but the intended conversion differs?). **This document does not adopt that option.**
 
 ## Open issues
 
@@ -206,7 +240,7 @@ More formally:
 
 **Non-camouflage (design goal):** The extended system should not admit a typing derivation that accepts a program **only** by widening positions to `Extern` (or to boundary types) when the same program would be rejected if every `Extern`-origin position were replaced by a **fixed** native type consistent with how the programmer intends to use that boundary. (A full proof obligation is implementation- and rule-specific.)
 
-**Inference conservativity:** For an expression whose typing derivation mentions **no** `Extern` except possibly in subexpressions that are **direct operands** of a declared **FFI boundary**—a `foreign` call, a built-in interop primitive, or an expression explicitly annotated as boundary-consuming—the **inferred** types match the baseline Cangjie rules, and no **new** ambiguous overload resolution arises **except** where `Extern` or interop APIs introduce genuine ambiguity that the programmer must resolve.
+**Inference conservativity:** For an expression whose typing derivation mentions **no** `Extern` except possibly in subexpressions that are **direct operands** of a declared **FFI boundary** (`foreign` call, a built-in interop primitive, or an expression explicitly annotated as boundary-consuming) the **inferred** types match the baseline Cangjie rules, and no **new** ambiguous overload resolution arises **except** where `Extern` or interop APIs introduce genuine ambiguity that the programmer must resolve.
 
 # Extern vs Any vs Dynamic
 
@@ -220,14 +254,14 @@ This section records how the proposed `Extern` type relates to Cangjie’s built
 |                                 | **Any**                                                                                                                                              | **Extern** (this proposal)                                                                                                                                 |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Primary role**                | Universal supertype for heterogeneous *native* Cangjie values                                                                                        | Marker for values that *originate in foreign code*; opaque until converted to a native type                                                                |
-| **Typical use**                 | Containers or APIs that intentionally erase to the top of the Cangjie lattice (e.g. `var any: Any = 1; any = "hello"`)                               | FFI parameters, results, and wrappers; consume via extern-compatible binding or explicit cast to native types                                              |
+| **Typical use**                 | Containers or APIs that intentionally erase to the top of the Cangjie lattice                                                                        | FFI parameters, results, and wrappers; consume via extern-compatible binding or explicit cast to native types                                              |
 | **Operations before narrowing** | No extra “envelope” rules beyond normal typing; still need `as` or APIs to use as `Int32`, a class, etc.                                             | Must not eliminate `Extern` via guards, arithmetic, pattern matching, etc. until converted (see [Extern type](#extern-type))                               |
 | **Storage (this proposal)**     | Normal rules; `Any` is a standard interface type                                                                                                     | Locals and fields use *native* types only; no binding annotated or inferred as bare `Extern`, etc.; assignment targets must be native                      |
 | **Type inference**              | Part of the baseline subtype hierarchy                                                                                                               | Intended not to subsume or break inference the way C# `dynamic` can (see [Safety property](#safety-property))                                              |
 | **Interop tooling**             | For example, TypeScript `any` is mapped to Cangjie `Any` in dts2cj-style generated code, with bridge helpers such as `Any.fromJSValue` / `toJSValue` | Intended to replace verbose “everything is `JSValue` + `asFunction()` / `asNumber()` …” patterns with surface types that still fail at explicit boundaries |
 
 
-In short: **Any** is maximal polymorphism inside the Cangjie type system; **Extern** is provenance and enforced boundary conversion for foreign values.
+In short: **Any** is *maximal polymorphism* inside the Cangjie type system; **Extern** is *provenance and enforced boundary conversion* for foreign values.
 
 ## Comparison with a C#-style `Dynamic` (hypothetical)
 
@@ -257,31 +291,31 @@ Cangjie has no `Dynamic` type. For comparison, imagine a type **Dynamic** design
 ## Barring local `Extern` variables
 
 1. Overload / target ambiguity (inference + Extern temporaries)
+
 Suppose api() has type Extern and you have:
 
 ```cangjie
 func process(n: Int32): Unit { ... }
 func process(s: String): Unit { ... }
 func bad(): Unit {
-    let x = api()           // if this is allowed to have type Extern...
-    process(x)            // which `process`? What conversion applies?
+    let x = api()  // if allowed to have type Extern...
+    process(x)    // which `process`? What conversion applies?
 }
 ```
 
 If `let x = api()` must not infer `Extern`, we reject this until the programmer writes something like `let x: Int32 = api()`. If `let x: Extern` (or inferred `Extern`) is allowed, the compiler either must add disambiguation rules or risk picking a default / widening path.
 
-2. Same envelope, multiple native interpretations (subtle runtime failure)
+1. Same envelope, multiple native interpretations (subtle runtime failure)
 
 This is perhaps the most problematic:
 
 ```cangjie
 func bad2(): Unit {
     let w: Extern = singleForeignValue()   // one foreign object
-    let a: Int32 = w                     // conversion succeeds
-    let b: String = w                    // later, treat *the same* `w` as String — may fail here
+    let a: Int32 = w      // conversion succeeds
+    let b: String = w    // later, treat *the same* `w` as String — may fail here
     ...
 }
 ```
 
 Nothing here requires illegal elimination on `w` before conversion: each line is a boundary. The problem is ergonomic / semantic: non-native let encourages reusing one Extern for several incompatible native roles. 
-
