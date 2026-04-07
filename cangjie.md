@@ -60,7 +60,7 @@ Cangjie programs can **propagate** extern values as *unopened envelopes* (pass t
 
 Operations that only **forward** an `Extern` (function call and return) are **propagation**, not **elimination**, in this sense, so they are permitted.
 
-**Propagation and elimination (informal).** *Propagation* means moving an `Extern` only by passing it as an argument, returning it, or otherwise forwarding it without treating it as native data. *Elimination* means using it as if it were already native: storing it in a `let`, `var`, or field as bare `Extern`, pattern-matching on it, applying native operators, indexing, and similar--anything that consumes the value *as* `Extern` rather than forwarding it unchanged. 
+**Propagation and elimination (informal).** *Propagation* means moving an `Extern` only by passing it as an argument, returning it, or otherwise forwarding it without treating it as native data. *Elimination* means using it as if it were already native: storing it in a `let`, `var`, or field as bare `Extern`, pattern-matching on it, applying native operators, indexing, and similar--anything that consumes the value *as* `Extern` rather than forwarding it unchanged.  
 
 In order to use an extern value as ordinary native **data**, it must first be **implicitly** or **explicitly** converted at a **boundary**. That conversion may fail at **runtime** if the foreign value cannot match the target type. Binding `let x: Int32 = e` when `e` has type `Extern` is **not** elimination; it is **boundary conversion** to native `Int32` and is allowed. Storing bare `Extern` in a variable is forbidden precisely so every use as native data goes through an explicit boundary.
 
