@@ -71,7 +71,7 @@ In order to use an extern value as ordinary native **data**, it must first be **
 - **Extern under data type constructors is forbidden.** It may not appear as a component of a tuple, as the argument of `Array<T>`, `Option<T>`, or any user-defined or standard-library **generic data** type, including nested positions (e.g. `Array<Array<Extern>>`, `(Bool, Extern)`). Any such written type is a **compile-time error**.
 - **Extern inside function types is allowed.** Function types are **native as a whole** even when a parameter or result type is `Extern` or contains `Extern` only under further function arrows (e.g. `(Int32) -> Extern`, `Extern -> Int32`, `(Extern) -> Extern`).
 - **Generic type parameters cannot be instantiated with `Extern`.** A type parameter `A` may not be replaced by `Extern`, explicitly or by inference, in any well-typed program. For example, `func foo<A>(x: Array<A>, y: A)` cannot be called at `A = Extern`.
-- `**let` and `var` bound variables may not have `Extern` type.** Local, global, or field variables may not receive `Extern` explicitly or via type inference.
+- `**let` and `var` bound variables may not have `Extern` type.** Local, global, or field variables may not receive `Extern` explicitly or via type inference. 
 - **Extern may never appear as the target of a type cast.** Values can only be converted *from* `Extern` to native data types.
 
 ### Native vs non-native data
