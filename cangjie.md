@@ -299,3 +299,35 @@ let result1: Int32 = jsapi.Add(2, 3)
 let result2: Int32 = pyapi.Add(4, 5)
 ```
 
+### How to have a stronger type discipline with ArkTS?
+
+Suppose that we want to avoid functions such as 
+
+```cangjie
+foreign func formatDate(timestamp: Float64): Extern
+```
+
+and we would prefer using functions which are fully typed such as
+
+```cangjie
+foreign func formatDate(timestamp: Float64): String
+```
+
+This can be achieved as follows: 
+
+```cangjie
+// declaring an external JavaScript API class corresponding to a module "utils"
+external Class Utils { ...
+  public extern func formatDate(timestamp: Float64): String
+...
+}
+
+// declaring an interface to the JSVMs
+Class JSVM {
+  public func newAPI(module: String) : Extern  // this is where Extern must be used
+}
+...
+let jsvm = new JSVM()
+let utils: Utils = jsvm.newAPI("Utils")        // retrieve an interface to "utils" and cast it into Utils
+utils.formatDate(1.0)
+```
