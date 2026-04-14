@@ -26,7 +26,7 @@ We aim to use this new style:
 
 ```cangjie
 // declaring an external API class
-external Class API { ...
+external class API { ...
   func Add(x: Int32, y: Int32) : Extern
 ...
 }
@@ -268,23 +268,23 @@ On `Extern` is enough as the conversion is delegated to external APIs provided f
 
 ```cangjie
 // declaring an external JavaScript API class
-external Class JSAPI { ...
+external class JSAPI { ...
   func Add(x: Int32, y: Int32) : Extern
 ...
 }
 
 // declaring an external Python API class
-external Class PyAPI { ...
+external class PyAPI { ...
   func Add(x: Int32, y: Int32) : Extern
 ...
 }
 
 // declaring interfaces to VMs
-Class JSVM {
+class JSVM {
   public func newAPI(module: String) : Extern
 }
 
-Class PyVM {
+class PyVM {
   public func newAPI(module: String) : Extern
 }
 
@@ -317,13 +317,13 @@ This can be achieved as follows:
 
 ```cangjie
 // declaring an external JavaScript API class corresponding to a module "utils"
-external Class Utils { ...
+external class Utils { ...
   public extern func formatDate(timestamp: Float64): String
 ...
 }
 
 // declaring an interface to the JSVMs
-Class JSVM {
+class JSVM {
   public func newAPI(module: String) : Extern  // this is where Extern must be used
 }
 ...
