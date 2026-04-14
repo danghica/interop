@@ -257,3 +257,45 @@ func bad2(): Unit {
 ```
 
 Nothing here requires illegal elimination on `w` before conversion: each line is a boundary. The problem is ergonomic / semantic: a hypothetical bare-`Extern` local encourages reusing one `Extern` value for several incompatible native roles. (This document forbids such a `let`; the snippet is illustrative of why.)
+
+## Questions and answers
+
+### How to interoperate with multiple languages
+
+*Will one `Extern` be enough, or type family including `JSExtern`, `PyExtern` and others will be required to cover distinct interop cases?*
+
+On `Extern` is enough as the conversion is delegated to external APIs provided for each interop scenario. For instance:
+
+```cangjie
+// declaring an external JavaScript API class
+external Class JSAPI { ...
+  func Add(x: Int32, y: Int32) : Extern
+...
+}
+
+// declaring an external Python API class
+external Class PyAPI { ...
+  func Add(x: Int32, y: Int32) : Extern
+...
+}
+
+// declaring interfaces to VMs
+Class JSVM {
+  public func newAPI(module: String) : Extern
+}
+
+Class PyVM {
+  public func newAPI(module: String) : Extern
+}
+
+// interop with multiple languages
+let jsvm = new JSVM()
+let pyvm = new PyVM()
+
+let jsapi: JSAPI = jsvm.newAPI("JSAPI")
+let pyapi: PyAPI = pyvm.newAPI("PyAPI")
+
+let result1: Int32 = jsapi.Add(2, 3)
+let result2: Int32 = pyapi.Add(4, 5)
+```
+
