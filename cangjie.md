@@ -148,7 +148,7 @@ let z = e as Bool   // z is inferred type Option<Bool>
 
 Which native targets are valid for a given foreign value, and how composite shapes are validated, is defined by the **implementation / interop API**. There is no separate structural “compatibility” relation on types. Model composite foreign values with **native** structs or classes, `Any`, extra parameters, several `Extern` parameters, or opaque FFI types, not `Extern` nested inside a data constructor.
 
-A **redundant** explicit cast is one where `as` repeats a conversion the context already forces. For example, `let x: Option<Bool> = e as Bool` when the same conversion would apply implicitly to `let x: Option<Bool> = e`, if the language allows the latter. Such redundant casts may still be allowed for documentation or symmetry.
+A **redundant** explicit cast is one where `as` repeats a conversion the context already forces. For example, `let x: Option<Bool> = e as Bool` when the same conversion would apply implicitly to `let x: Option<Bool> = e`, if the language allows the latter. Note that the former is *safe* in the sense that if the cast fails it returns `Null`, whereas the latter is *unsafe* in the sense that if the conversion fails a runtime error is issued. 
 
 Although legal, these forms may **fail at runtime** at the boundary if the foreign value does not convert to the target native type.
 
