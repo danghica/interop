@@ -62,7 +62,9 @@ Operations that only **forward** an `Extern` (function call and return) are **pr
 
 **Propagation and elimination (informal).** *Propagation* means moving an `Extern` only by passing it as an argument, returning it, or otherwise forwarding it without treating it as native data. *Elimination* means using it as if it were already native: storing it in a `let`, `var`, or field as bare `Extern`, pattern-matching on it, applying native operators, indexing, and similar--anything that consumes the value *as* `Extern` rather than forwarding it unchanged.  
 
-In order to use an extern value as ordinary native **data**, it must first be **implicitly** or **explicitly** converted at a **boundary**. That conversion may fail at **runtime** if the foreign value cannot match the target type. Binding `let x: Int32 = e` when `e` has type `Extern` is **not** elimination; it is **boundary conversion** to native `Int32` and is allowed. Storing bare `Extern` in a variable is forbidden precisely so every use as native data goes through an explicit boundary.
+In order to use an extern value as ordinary native **data**, it must first be **implicitly** or **explicitly** converted at a **boundary**. That conversion may fail at **runtime** if the foreign value cannot match the target type. Binding `let x: Int32 = e` when `e` has type `Extern` is **not** elimination; it is **boundary conversion** to native `Int32` and is allowed. Storing bare `Extern` in a variable is forbidden precisely so every use as native data goes through an explicit boundary. 
+
+The way conversion errors are handled at runtime are left unspecified at the language of language or compiler, and are delegated to the implementation. 
 
 **Rules at a glance.** You may not bind `let`/`var`/fields to bare `Extern` or nest `Extern` inside tuple, array, option, or other generic **data** types. You may use `Extern` in function types and as parameter/result types. Generic type parameters cannot be instantiated as `Extern`. You cannot cast *to* `Extern`. Otherwise, pass and return `Extern` freely; convert to native types only at boundaries (bindings, assignments, and `as`), where failure is possible at run time. The normative bullets in the next subsection spell this out.
 
@@ -331,3 +333,55 @@ let jsvm = new JSVM()
 let utils: Utils = jsvm.newAPI("Utils")        // retrieve an interface to "utils" and cast it into Utils
 utils.formatDate(1.0)
 ```
+
+### Comparison to other approaches
+
+Another possibility is to use system-specific compiler instrumentation to maintain proxy objects between the Cangjie side and a designated special runtime, e.g. ArkTS. For instance:
+
+```cangjie
+@Interop[ArkTS, module: "geometry"]
+foreign class Rectangle {
+    var width: Float64
+    var height: Float64
+    init(w: Float64, h: Float64)
+    func area(): Float64
+}
+
+func foo() {
+    let rect = Rectangle(10.0, 20.0)
+    rect.width = 30.0
+    let a = rect.area()  // 200.0
+}
+```
+In the proposed approach this would be as follows.
+
+First we define an `external` class. All its members are handles to external data or functions. 
+```cangjie
+external class Rectangle {
+    var width: Float64
+    var height: Float64
+    init(w: Float64, h: Float64)
+    func area(): Float64
+}
+```
+Instead of compiler instrumentation (`@Interop[ArkTS, module: "geometry"]`) we use an API to the target VM:
+
+```cangjie
+// A simple sample API to the external runtime
+class VirtualMachine {
+  // retrieve an object representing a module of that runtime using its name
+  external public func import(module: String): Extern 
+}
+
+let vm = new VirtualMachine()
+```
+
+Note that the only function that *must* return an `External` type is in our example `import()` because it maps a module name into an object, which is also `external`. The members of the `external` class can be `External` but they can also be given designated Cangjie types, which means that they must always be converted to that type. 
+
+The example user code is then exactly the same as above. 
+
+The advantages our our approach:
+* use language support rather than compiler instrumentation
+* delegate the implementation of the interop to libraries
+* support a uniform interface to any external language
+* the `external` classes do not have to mirror the classes in the foreign langauge exactly, but the members can convert to-and-from data in the external counterpart. 
