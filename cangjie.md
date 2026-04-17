@@ -45,6 +45,25 @@ The keyword `external` applies to individual `func` and `class` declarations who
 
 **Proposal (vs. C FFI):** Calls to `external` functions are intended to be ordinary safe calls at the Cangjie source level—callers do not wrap them in `unsafe`, unlike typical C interop in current Cangjie. Final rules depend on how this proposal is integrated with the shipping language.
 
+For instance consider this class
+
+```cangjie
+external class Rectangle {
+  var width: Float64
+  var height: Float64
+  init(w: Float64, h: Float64}
+  func area(): Float64
+  func color(): Extern
+```
+
+It declares an object that lives in the foreign memory space (e.g. an ArkTS virtual machine). These objects cannot be created using a constructor, so the following is a syntax error: 
+
+```cangjie
+let r = new Rectangle(1.0, 2.0)
+```
+
+Any use of the data or function members of an `external` class are instrumented by the compiler to import and export data from the foreign memory space. If the data types are Cangjie types (for instance in the example above `width: Float64`) they are always cast into that Cangjie type. If they have external type (e.g. `func color(): Extern`) then the rules for the `Extern` type apply, as described below.
+
 # Types
 
 - New proposed type: `Extern`
@@ -162,6 +181,25 @@ Treating all function types as native does not weaken safety: boundary failures 
 e as Extern
 e as (Bool, Extern)   // ill-formed type
 e as Array<Extern>    // ill-formed type
+```
+
+### Dynamic behavior
+
+In addition to casting to a Cangjie type as discussed above an expression of `Extern` type can be used locally as a dynamic type via the member access operator (`.`). If `e: Extern` then `e.m` is valid for any identifier `m`. 
+
+For instance consider interfacing with a JavaScript program that manages a DOM which we want to treat as an object for convenience, instead of making queries by label. 
+
+```cangjie
+func getDom(): External
+let item: DomItem = getDom().body.menu.item
+```
+
+Note that unlike C# the following is not possible: 
+
+```cangjie
+func getDom(): External
+let x: External = getDom().body.menu
+let item: DomItem = x.item
 ```
 
 # Safety property
