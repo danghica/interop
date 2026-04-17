@@ -35,6 +35,8 @@ external class API { ...
 let result: Int32 = api.Add(2, 3)
 ```
 
+The proposed approach is influenced by the use of `dynamic` in C# but with extra restrictions in order to prevent the known 'dark pattern' of using dyamic types to bypass the type system. 
+
 # Lexical
 
 - New proposed keywords: `external`,`Extern`
