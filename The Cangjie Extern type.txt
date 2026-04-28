@@ -1,0 +1,386 @@
+# The Cangjie `Extern` type
+
+
+
+## Introduction
+
+The proposed type `Extern` is the type of values that reside in a *foreign memory space* relative to Cangjie. 
+These values can be bound to variables and function arguments, or can be produced by expressions. 
+By a "foreign memory space" we mean memory that is managed by a different runtime or virtual machine than Cangjie, for instance ArkTS, JavaScript, or Python. We call it a *foreign runtime*.
+
+When handling such values the following principles apply:
+
+* Cangjie makes no assumptions about these values in terms of types (at language level) or memory layout (at compiler and runtime level). 
+* `Extern` values can be mapped into Cangjie values by special third-party libraries which are registered with the compiler as capable of handling `Extern` values; we call such libraries *proxies*. 
+* `Extern` values offer a limited set of dynamic-type capability.
+
+The proposed tag `external func` is used to indicate functions that are supplied by a foreign runtime.
+
+
+
+## Comparison to `foreign`
+
+We prefer to leave the `foreign` tag exclusively for C interop because of the following reasons: 
+
+1. C has a special role as the language of the ABI for most OSs.
+2. The compiler will always know the memory layout of C types for the target architecture so a certain degree of type safety can be enforced at compile time using the `CType` mechanism. 
+3. A function returning an `Extern` value can be a Cangjie function therefore it does not need to be tagged as `unsafe`. 
+4. A function tagged as `external` need not be `unsafe` if it is provided by a managed safe runtime such as ArkTS or Python. 
+   
+   
+
+## Quick introduction
+
+`Extern` is a new type that can be used for variables and functions similarly to other Cangjie types. 
+There are some specific rules which will be discussed below. 
+
+The tag `external func` indicates that a function is not performed by the current Cangjie runtime. 
+Functions tagged `external func` are declaration only, without a function body. 
+
+For example the following external function looks up geographic location using latitude and longitude and returns a GeoJSON object.
+The data is `Extern` because it resides in the foreign memory space and has a complex structure. 
+
+```cangjie
+external func lookup(lat: Float32, long: Float32): Extern
+```
+
+A GeoJSON object can be simple or a complex object. 
+For instance it can be a point landmark such as the Space Needle in Seattle:
+
+```JSON
+{
+  "type": "Feature",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [-122.3493, 47.6205]
+  },
+  "properties": {
+    "name": "Space Needle",
+    "city": "Seattle",
+    "category": "Landmark"
+  }
+}
+```
+
+Or it can be the oval contour of the Colosseum in Rome:
+
+```JSON
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "The Colosseum",
+        "amenity": "historic_site",
+        "material": "travertine",
+        "built_in": "80 AD"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [12.493, 41.890], [12.494, 41.891], [12.491, 41.891], 
+            [12.490, 41.890], [12.491, 41.889], [12.493, 41.890]
+          ],
+          [
+            [12.492, 41.890], [12.492, 41.891], [12.491, 41.891], 
+            [12.491, 41.890], [12.492, 41.890]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Via dei Fori Imperiali",
+        "highway": "primary",
+        "surface": "cobblestone"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [12.487, 41.893],
+          [12.490, 41.891],
+          [12.492, 41.890]
+        ]
+      }
+    }
+  ]
+}
+```
+
+In some scenarios the application developer may want to use a fully featured library for accessing such data and mapping it into Cangjie types precisely. 
+But in many scenarios the application developer may want to explore the returned object dynamically. 
+
+
+
+### Scenario 1: precise typing
+
+In this application scenario the developer knows that the location data is always a landmark, therefore it can be cast into a precise Cangjie type. 
+
+```cangjie
+struct Landmark {
+  let type: String
+  let coordinates: (Float32, Float32)  
+  let name: String
+  let city: String
+  let category: Category
+}
+```
+
+where `Category` is some `enum` defined elsewhere. 
+
+Then the following code uses the lookup function to retrieve a landmark `lm`:
+
+```cangjie
+let lm: Landmark = lookup(-122.3493, 47.6205)
+println(lm.name) // will print "Space Needle"
+```
+
+Behind the scenes the following things will happen:
+
+1. The compiler will delegate the function call to a proxy that has been associated to the function `lookup`.
+2. The compiler will use the type of `lm` to inform the proxy that the returned data must be converted by the proxy to a `Landmark`. 
+3. The local variable will store a `Landmark` object extracted from the `Extern` returned by the `lookup`. 
+
+Note that the process of converting the `Extern` data to the Cangjie type is delegated to the proxy, which is a library registered to the compiler via a special mechanism. 
+Also note that this process may fail, case in which it is left to the proxy to specify how it will handle the failure (special return value, throw an exception, perform an effect, etc.)
+The proxy will also handle the situation of the external function raising exceptions or having other error conditions. 
+
+
+
+### Scenario 2: dynamic typing
+
+In this scenario the developer does not know exactly what will be the GeoJSON value structure and may be unwilling to implement or use a comprehensive interface to the complex GeoJSON standard. 
+The only thing that the developer wants is to extract the name of the returned geographical object. 
+In this case the Cangjie code will use the dynamic features of `Extern`: it is possible to treat an `Extern` as an object and using the `.` member syntax access any presumed data or function members, which will always have the (return) type of `Extern`, allowing arbitrary chaining of such operations. 
+
+The following code retrieves a landmark name `ln`:
+
+```cangjie
+let ln: String = lookup(12.487, 41.893).features[0].properties.name
+println(ln) // will print "Colosseum"
+```
+
+In this case what happens is the following: 
+
+1. The compiler will delegate the function call to a proxy that has been associated to the function `lookup`.
+2. Because the result of `lookup` is `Extern` it will instruct the proxy to interpret `.features[0]` as a field access where the field is named `features` and is an array, which will have the type also `Extern`. 
+3. Similar for `.properties` and `.name`.
+4. Finally it will instruct the proxy to convert the resulting value to a Cangjie `String` type and bind it to the local `ln`. 
+
+As before, all these operations are delegated to the proxy, including how to handle possible failure. 
+
+
+
+### Design philosophy
+
+The design of `Extern` is inspired by that of `dynamic` in C#. 
+The difference is that the restrictions in binding and assignment discussed below will make it difficult to use `Extern` as an escape hatch from the type system, avoiding the dark patterns that `dynamic` is sometimes used for. 
+Note that *difficult* is not *impossible*: however, avoiding the type system is mainly a misguided convenience and not a deliberate exercise; by making it significantly less convenient than simply using the type system the motivation to pursue dark patterns disappears. 
+
+
+
+## `Extern` variables
+
+Consider `extexp` an expression that has `Extern` type and `cjexp` an expression that has a Cangjie type `T`. 
+
+
+
+### Using `let`
+
+The rules for using `Extern` types and let-bound variables are as follows:
+
+1. `let x = extexp` and `let x: Extern = extexp` are correct and equivalent and will result in a variable `x` of type `External` having the value produced by `extexp` and, importantly, access to the proxy managing the value of `extexp`. 
+2. `let x: T = extexp` is correct and will result in the proxy associated with `extexp` converting the value it produces to the Cangjie `T` type and giving that value to `x`.
+3. `let x: Extern = cjexp` is incorrect: a new variable `x` is not associated with a proxy so it cannot process the result of type `T` of expression `cjexp`. The compiler will issue a compile error. 
+   
+   
+
+### Using `var`
+
+The rules for using `Extern` types and var-bound variables are similar to those for `let`.
+
+1. `var x = extexp` and `var x: Extern = extexp` are correct and equivalent and will result in a mutable variable `x` of type `External` initialized with value produced by `extexp` and, importantly, access to the proxy managing the value of `extexp`. 
+2. `var x: T = extexp` is correct and will result in the proxy associated with `extexp` converting the value it produces to the Cangjie `T` type and initializing `x` with that value. 
+3. `var x: Extern = cjexp` is incorrect: a new mutable variable `x` is not associated with a proxy so it cannot process the result of type `T` of expression `cjexp`. The compiler will issue a compile error. 
+
+The same rules apply to initializing assignment, i.e. when there is some code between the variable declaration and the initial assignment for the above cases. 
+For instance, this is correct:
+
+```Cangjie
+var x: Extern
+// some code
+x = extexp
+```
+
+This will lead to a compile error:
+
+```Cangjie
+var x: Extern
+// some code
+x = cjexp
+```
+
+### Using assignment
+
+The rules for assignment involving `Extern` are as follows.
+
+1. If `x: T` then `x = extexp` is correct. The proxy associated with the result of `extexp` will convert its result to `T`, the type of `x` and assign it to `x`. 
+2. If `x: Extern` is an *initialized* mutable variable then `x = cjexp` is correct. The proxy associated with `x` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs. 
+3. If `x: Extern` is an *uninitialized* mutable variable then `x = cjexp` is incorrect. There is no proxy associated with `x` to convert the result of `cjexp` from `T` to whatever the foreign runtime needs. A compiler error will be issued. **Note:** The case `x = extexp` is correct, as an initializing assignment discussed above. 
+4. If `x: Extern` is an *initialized* mutable variable then `x = extexp` is incorrect. The proxies for `x` or `extexp` may or may not be the same. If they are the same then the proxy could instruct the foreign runtime to perform the assignment. If they are not the same there is no schema for converting between the two. 
+
+> *Obs:* Since assignment of `External` to `External` may sometimes succeed, and since programs involving `Extern` are not type safe Cangjie can be either strict (compile error) or permissive (compiler warning). In the latter case a special exception marking mismatched proxies should be raised. Note that rules 2-3 become much more useful if a permissive approach to assignment is taken. 
+
+
+
+## Function calls
+
+It is legal for function parameters and results to use `Extern` and for function types to mention `Extern`. 
+For instance the identity function works on extern values:
+
+```cangjie
+func id(x: Extern): Extern { return x }
+```
+
+It is also legal for a function to select between two `Extern` values.
+
+```cangjie
+func sel(x: Extern, y: Extern): Extern { if (test()) { x } else { y } }
+```
+
+Because of the reasons already discussed for let-bound variables:
+
+* it is legal to pass an `Extern` value to a function as a Cangjie-typed argument.
+* it is legal to pass an `Extern` value to a function as an `Extern`-typed argument. 
+* it is illegal to pass a Cangjie-typed value as an `Extern` argument
+
+### External functions
+
+The tag `external func` indicates that a function is not performed by the current Cangjie runtime. 
+Functions tagged `external func` are declaration only, without a function body. 
+External functions must be registered with a proxy using a special compiler-specific mechanism. 
+
+For example: 
+
+```cangjie
+external func lookup(lat: Float32, long: Float32): External
+```
+
+Because external function arguments are passed to a foreign runtime, it is unsafe for them to be `External`-typed in case their proxies are different.
+The permissive or restrictive approach must be applied consistently here as well. 
+
+
+
+## Compound data types
+
+The type `External` may participate in the formation of composite data types such as tuples, structs, classes, etc. 
+The type `External` can be used to instantiate a generic, for instance `Array<External>`. 
+
+> Note: The latter feature requires a permissive approach to `External` in assignment, otherwise safe assignment for instance at `Array<T>` may be deemed unsafe by the type system when `T` is `External`. 
+
+
+
+## Dynamic features
+
+A value of type `Extern` is dynamic in the sense that it can be decorated with arbitrary member access and method access operations. 
+The type of the member and the return type of the method are always `External` and they remain associated with the same proxy. 
+
+If `e: Extern` is a variable or expression and `id` is a valid Cangjie identifier then `e.id: Extern` is legal. 
+Behind the scenes the proxy associated with `e` will be sent the identifier `id` as a string and it will be up to the proxy to resolve it. 
+
+Similarly, `e.id(e1, e2, ...): Extern` is also legal if the types of `e1`, `e2`, etc. are Cangjie types. 
+The runtime of `e` will be sent the identifier `id` and instructed to call a function of that name on the runtime with arguments the value of `e1`, `e2`, etc. These values have known CJ types and the proxy must handle their conversion to the data the runtime requires. 
+It is illegal (for the same reasons discussed in the assignment of `Extern` to `Extern`) for the arguments to be `Extern`, as they may be transferred from one runtime to another. 
+The decision to be strict or permissive should be consistent to that made in the case of assignment. 
+
+
+
+## Creation of `Extern` values
+
+Values of type `Extern` can only be created by the proxies, presumably by interfacing with the foreign runtime in scenario-dependent ways. 
+There is no Cangjie constructor for `Extern`. 
+
+There is no specific Cangjie language support for constructing `Extern` data but the developer can do it in several ways. 
+
+1. The easiest way is to call foreign functions which produce new `Extern` data, as shown in the preliminary example (`lookup` function). 
+2. Use factory methods and pass the name of the type we want created as an argument. For example imagine a proxy that manages access to an ArkTS runtime. That proxy may have as part of its API a method `createObject(typeName: String): External` which creates a remote object of type `typeName` in that runtime and return it as `Extern`. For instance `createObject("JSRectangle")` will instruct the ArkTS runtime to create a `JSRectangle` object and return it as `Extern` to the Cangjie runtime. 
+3. Use the dynamic features of `Extern` to pass constructors. For instance if `vm` is some `Extern` value then `vm.JSRectangle(1, 2)`, which is legal syntax under the dynamic features of `Extern`, may be able to identify `JSRectangle` as a constructor of an ArkTS object and issue the correct call to the runtime. 
+
+In order to preserve the generality of interaction between Cangjie and other runtimes via `Extern` no specific support will be provided for external constructors. 
+
+
+
+## External classes
+
+Direct language support for external classes (i.e. types of objects residing in a foreign runtime) is not offered. 
+Accessing such objects is done using the dynamic features of `Extern`. 
+For extra support native Cangjie wrappers can be used, as shown below. 
+This design pattern can be automated with simple macros due to its regular nature. For instance:
+
+```cangjie
+class Rectangle {
+    // The external object 
+    private var blob: Extern
+
+    // The vm managing the object
+    private var vm: Extern
+
+    // The Cangjie constructor calls the external constructor
+    // to initialize the foreign object
+    public Rectangle(vm: Extern) {
+      this.vm = vm
+      this.blob = vm.Rectangle() 
+    }
+
+    // The fields of the Cangjie objects are props
+    // wrapping the fields of the external object
+    public prop width: Float64 {
+      get() { 
+    let w :Float 64 = blob.width 
+        return w
+      }
+      set(value) { 
+        blob.width = value 
+      }
+
+    public prop height: Float64 {
+      get() { 
+    let h: Float 64 = blob.height 
+        return h
+      }
+      set(value) { 
+        blob.height = value 
+      }
+
+    // The functions of the Cangjie object are wrappers
+    // for the external functions
+    func area(): Float64 {
+        let a: Float64 = blob.area()
+        return a
+    }
+}
+
+
+// Usage:
+// Assume a simple sample API to the external runtime
+// Assume Rectangle is in module 'geometry'
+class VirtualMachine {
+  public func import(module: String): Extern 
+}
+
+// ----------------------------------------------
+// user code
+
+// first Create proxy to an external runtime
+let vm = new VirtualMachine()
+let r = Rectangle(vm.import("geometry"))
+r.width = 3.0
+r.height = 2.0
+let a = r.area()
+println(r.height)
+```
+
+
