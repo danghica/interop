@@ -2,13 +2,20 @@ Main feedback points
 * simpler motivating examples; JSON is not a motivation for interop but for `dynamic`; use ArkTS
 * remove the implementation hints or mark as asides
 * language support for errors and exceptions (I disagree)
-* use `foreign` for functions 
+  * Base Exception or Effect
+* use `foreign` for functions
+  * safe / unsafe? 
 * where is `Extern` in the type hierarchy?
+  * between Any and Nothing, separate
 * associate types with external runtimes to prevent x:Ext = e:Ext runtime errors
+  * Extern<T> where T is the type of the VM
 * use explicit type casts to Cangjie
+  * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
 * illustrate all rules with examples
 * parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
+  * v.e send the parse tree to the VM
 * e.id for id a mangled identifier (excape)
+  * up to proxy provider to give a mapping
 * both points above: don't break parser
 * no rules for creation (just examples)
 * 'Rectangle' compare with current approaches
