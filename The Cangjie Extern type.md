@@ -1,5 +1,5 @@
 Main feedback points
-* simpler motivating examples; JSON is not a motivation for interop but for `dynamic`; use ArkTS
+* ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic` 
 * remove the implementation hints or mark as asides
 * language support for errors and exceptions (I disagree)
   * Base Exception or Effect
@@ -36,18 +36,8 @@ When handling such values the following principles apply:
 * `Extern` values can be mapped into Cangjie values by special third-party libraries which are registered with the compiler as capable of handling `Extern` values; we call such libraries *proxies*. 
 * `Extern` values offer a limited set of dynamic-type capability.
 
-The proposed tag `external func` is used to indicate functions that are supplied by a foreign runtime.
-
-
-
-## Comparison to `foreign`
-
-We prefer to leave the `foreign` tag exclusively for C interop because of the following reasons: 
-
-1. C has a special role as the language of the ABI for most OSs.
-2. The compiler will always know the memory layout of C types for the target architecture so a certain degree of type safety can be enforced at compile time using the `CType` mechanism. 
-3. A function returning an `Extern` value can be a Cangjie function therefore it does not need to be tagged as `unsafe`. 
-4. A function tagged as `external` need not be `unsafe` if it is provided by a managed safe runtime such as ArkTS or Python. 
+The use of the tag `foreign func` is extended to indicate functions that are supplied by a foreign runtime.
+A function tagged as `foreign` need not be executed in an  `unsafe` block if it is provided by a managed safe runtime such as ArkTS or Python. 
    
    
 
@@ -56,80 +46,36 @@ We prefer to leave the `foreign` tag exclusively for C interop because of the fo
 `Extern` is a new type that can be used for variables and functions similarly to other Cangjie types. 
 There are some specific rules which will be discussed below. 
 
-The tag `external func` indicates that a function is not performed by the current Cangjie runtime. 
-Functions tagged `external func` are declaration only, without a function body. 
-
-For example the following external function looks up geographic location using latitude and longitude and returns a GeoJSON object.
-The data is `Extern` because it resides in the foreign memory space and has a complex structure. 
+For example the following foreign function looks up geographic location using latitude and longitude and returns a geographical object.
+The data is `Extern` because it resides in a foreign memory space. 
 
 ```cangjie
-external func lookup(lat: Float32, long: Float32): Extern
+foreign func lookup(lat: Float32, long: Float32): Extern
 ```
 
-A GeoJSON object can be simple or a complex object. 
-For instance it can be a point landmark such as the Space Needle in Seattle:
+The geographical object can have arbitrary complexity. 
+For instance it can be a simple point landmark such as the Space Needle in Seattle, informally represented as
 
 ```JSON
-{
-  "type": "Feature",
-  "geometry": {
-    "type": "Point",
-    "coordinates": [-122.3493, 47.6205]
-  },
-  "properties": {
-    "name": "Space Needle",
-    "city": "Seattle",
-    "category": "Landmark"
-  }
-}
+  coordinates: [-122.3493, 47.6205]
+  name: "Space Needle",
+  city: "Seattle",
+  category: "Landmark"
 ```
 
-Or it can be the oval contour of the Colosseum in Rome:
+Or it can be something more complex, such as the oval contour of the Colosseum in Rome:
 
 ```JSON
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "The Colosseum",
-        "amenity": "historic_site",
-        "material": "travertine",
-        "built_in": "80 AD"
-      },
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
+  name: "The Colosseum",
+  amenity: "historic_site",
+  material: "travertine",
+  built_in: "80 AD"
+  type: Polygon,
+  coordinates: 
             [12.493, 41.890], [12.494, 41.891], [12.491, 41.891], 
-            [12.490, 41.890], [12.491, 41.889], [12.493, 41.890]
-          ],
-          [
+            [12.490, 41.890], [12.491, 41.889], [12.493, 41.890],
             [12.492, 41.890], [12.492, 41.891], [12.491, 41.891], 
             [12.491, 41.890], [12.492, 41.890]
-          ]
-        ]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "Via dei Fori Imperiali",
-        "highway": "primary",
-        "surface": "cobblestone"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [12.487, 41.893],
-          [12.490, 41.891],
-          [12.492, 41.890]
-        ]
-      }
-    }
-  ]
-}
 ```
 
 In some scenarios the application developer may want to use a fully featured library for accessing such data and mapping it into Cangjie types precisely. 
@@ -137,13 +83,12 @@ But in many scenarios the application developer may want to explore the returned
 
 
 
-### Scenario 1: precise typing
+### Simple scenario: precise typing
 
 In this application scenario the developer knows that the location data is always a landmark, therefore it can be cast into a precise Cangjie type. 
 
 ```cangjie
 struct Landmark {
-  let type: String
   let coordinates: (Float32, Float32)  
   let name: String
   let city: String
@@ -172,16 +117,16 @@ The proxy will also handle the situation of the external function raising except
 
 
 
-### Scenario 2: dynamic typing
+### Complex scenario: dynamic typing
 
-In this scenario the developer does not know exactly what will be the GeoJSON value structure and may be unwilling to implement or use a comprehensive interface to the complex GeoJSON standard. 
-The only thing that the developer wants is to extract the name of the returned geographical object. 
-In this case the Cangjie code will use the dynamic features of `Extern`: it is possible to treat an `Extern` as an object and using the `.` member syntax access any presumed data or function members, which will always have the (return) type of `Extern`, allowing arbitrary chaining of such operations. 
+In this scenario the developer may be unwilling to implement comprehensive interface to use the foreign library. 
+Assume the only thing that the developer wants is to extract the name of the returned geographical object. 
+In this case the Cangjie code will use the dynamic features of `Extern`: it is possible to treat an `Extern` as an object and using the `.` member syntax access any presumed data or function members, which will always have the (return) type of `Extern`.
 
 The following code retrieves a landmark name `ln`:
 
 ```cangjie
-let ln: String = lookup(12.487, 41.893).features[0].properties.name
+let ln: String = lookup(12.487, 41.893).name
 println(ln) // will print "Colosseum"
 ```
 
