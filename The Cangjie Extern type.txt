@@ -1,3 +1,18 @@
+Main feedback points
+* simpler motivating examples; JSON is not a motivation for interop but for `dynamic`; use ArkTS
+* remove the implementation hints or mark as asides
+* language support for errors and exceptions (I disagree)
+* use `foreign` for functions 
+* where is `Extern` in the type hierarchy?
+* associate types with external runtimes to prevent x:Ext = e:Ext runtime errors
+* use explicit type casts to Cangjie
+* illustrate all rules with examples
+* parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
+* e.id for id a mangled identifier (excape)
+* both points above: don't break parser
+* no rules for creation (just examples)
+* 'Rectangle' compare with current approaches
+
 # The Cangjie `Extern` type
 
 
