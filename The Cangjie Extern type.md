@@ -242,14 +242,35 @@ The same implicit conversions rules already discussed for variables apply:
 
 
 
-## Compound data types
+## Typing considerations
 
-The type `Extern` may participate in the formation of composite data types such as tuples, structs, classes, etc. 
+The type `Extern` is a subtype of `Any` but otherwise unrelated to the hierarchy of internal types. 
+The type `Extern<T>` may participate in the formation of composite data types such as tuples, structs, classes, etc. 
 The type `Extern<T>` can be used to instantiate a generic, for instance `Array<Extern<T>>`. 
+The type `Extern<T>` is invariant in `T`. 
 
-> TODO : USING EXTERN IN AS T, MIND ANY
+The safe casting works for `Extern<T>` as for any type and this cast must not be confused with the implicit conversion to and from internal types. 
 
+For instance let `x: Any`:
+```cangjie
+let y = (x as Extern<T>).getOrThrow()
+// will type y as Extern<T> and bind it to the value of x
+// if and only if its type is actually Extern<T>
+// otherwise this throws an exception
 
+let z = y as Int32
+// this is a type error as Extern<T> is never a subtype of Int32
+}
+```
+
+> *Note:* The implicit conversion between extern-typed values to intern-type values ensures that the semantics of `as` need not change.
+> If `as` has a different behaviour for `Extern` then the following code would require revising the semantics of `as`:
+> ```cangjie
+> func f<U, V>(x: U, y: V) {
+>  let z = x as V
+>  // the behaviour of as is no longer polymorphic on the type 
+> }
+> ```
 
 ## Dynamic features
 
