@@ -1,8 +1,8 @@
 Main feedback points
 * ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
 * ✅ use `foreign` for functions
-* associate types with external runtimes to prevent x:Ext = e:Ext runtime errors
-  * Extern<T> where T is the type of the VM
+* associate types with external runtimes to prevent `x = e` runtime errors when both are `Extern`
+  * `Extern<T>` where `T` is the type of the VM
 * remove the implementation hints or mark as asides
 * language support for errors and exceptions 
   * Base Exception or Effect
@@ -25,15 +25,16 @@ Main feedback points
 
 ## Introduction
 
-The proposed type `Extern` is the type of values that reside in a *foreign memory space* relative to Cangjie. 
+The proposed type `Extern<T>` is the type of values that reside in a *foreign memory space* relative to Cangjie. 
 These values can be bound to variables and function arguments, or can be produced by expressions. 
 By a "foreign memory space" we mean memory that is managed by a different runtime or virtual machine than Cangjie, for instance ArkTS, JavaScript, or Python. We call it a *foreign runtime*.
 
 When handling such values the following principles apply:
 
 * Cangjie makes no assumptions about these values in terms of types (at language level) or memory layout (at compiler and runtime level). 
-* `Extern` values can be mapped into Cangjie values by special third-party libraries which are registered with the compiler as capable of handling `Extern` values; we call such libraries *proxies*. 
-* `Extern` values offer a limited set of dynamic-type capability.
+* `Extern<T>` values can be mapped into Cangjie values by special third-party libraries which are registered with the compiler
+* The type `T` in `Extern<T>` is used to distinguish between several runtimes and must always implement the interface `ExternalRuntime`. 
+* `Extern<T>` values offer a special set of dynamic-type capability. 
 
 The use of the tag `foreign func` is extended to indicate functions that are supplied by a foreign runtime.
 A function tagged as `foreign` need not be executed in an  `unsafe` block if it is provided by a managed safe runtime such as ArkTS or Python. 
@@ -42,14 +43,14 @@ A function tagged as `foreign` need not be executed in an  `unsafe` block if it 
 
 ## Quick introduction
 
-`Extern` is a new type that can be used for variables and functions similarly to other Cangjie types. 
+`Extern<T>` is a new type that can be used for variables and functions similarly to other Cangjie types. 
 There are some specific rules which will be discussed below. 
 
 For example the following foreign function looks up geographic location using latitude and longitude and returns a geographical object.
-The data is `Extern` because it resides in a foreign memory space. 
+The data is `Extern<T>` because it resides in a foreign memory space. 
 
 ```cangjie
-foreign func lookup(lat: Float32, long: Float32): Extern
+foreign func lookup<T>(lat: Float32, long: Float32): Extern<T>
 ```
 
 The geographical object can have arbitrary complexity. 
@@ -100,43 +101,35 @@ where `Category` is some `enum` defined elsewhere.
 Then the following code uses the lookup function to retrieve a landmark `lm`:
 
 ```cangjie
-let lm: Landmark = lookup(-122.3493, 47.6205)
+let lm: Landmark = lookup<ArkTS>(-122.3493, 47.6205)
 println(lm.name) // will print "Space Needle"
 ```
 
-Behind the scenes the following things will happen:
+The way the developer should understand this code is as follows.
+The return type `Extern<T>` of the function `lookup` needs to be instantiated to the type of some elsewhere defined runtime (`ArkTS`) which will tell who is responsible for executing `lookup` and serializing and deserializing data into Cangjie. 
+The local variable will therefore store a `Landmark` object extracted from the `Extern<ArkTS>` returned by the `lookup<ArkTS>`. 
 
-1. The compiler will delegate the function call to a proxy that has been associated to the function `lookup`.
-2. The compiler will use the type of `lm` to inform the proxy that the returned data must be converted by the proxy to a `Landmark`. 
-3. The local variable will store a `Landmark` object extracted from the `Extern` returned by the `lookup`. 
-
-Note that the process of converting the `Extern` data to the Cangjie type is delegated to the proxy, which is a library registered to the compiler via a special mechanism. 
-Also note that this process may fail, case in which it is left to the proxy to specify how it will handle the failure (special return value, throw an exception, perform an effect, etc.)
-The proxy will also handle the situation of the external function raising exceptions or having other error conditions. 
+Also note that this process may fail, case in which a special exception, to be discussed later, will be raised. 
 
 
 
 ### Complex scenario: dynamic typing
 
-In this scenario the developer may be unwilling to implement comprehensive interface to use the foreign library. 
+In this scenario the developer may be unwilling to implement a comprehensively typed interface to use the foreign library. 
 Assume the only thing that the developer wants is to extract the name of the returned geographical object. 
-In this case the Cangjie code will use the dynamic features of `Extern`: it is possible to treat an `Extern` as an object and using the `.` member syntax access any presumed data or function members, which will always have the (return) type of `Extern`.
+In this case the Cangjie code will use the dynamic features of `Extern<T>`: it is possible to treat an `Extern<T>` as an object and using the `.` member syntax access any presumed data or function members, which will always have the (return) type of `Extern<T>`, with the same `T`.
 
 The following code retrieves a landmark name `ln`:
 
 ```cangjie
-let ln: String = lookup(12.487, 41.893).name
+let ln: String = lookup<ArkTS>(12.487, 41.893).name
 println(ln) // will print "Colosseum"
 ```
 
 In this case what happens is the following: 
-
-1. The compiler will delegate the function call to a proxy that has been associated to the function `lookup`.
-2. Because the result of `lookup` is `Extern` it will instruct the proxy to interpret `.features[0]` as a field access where the field is named `features` and is an array, which will have the type also `Extern`. 
-3. Similar for `.properties` and `.name`.
-4. Finally it will instruct the proxy to convert the resulting value to a Cangjie `String` type and bind it to the local `ln`. 
-
-As before, all these operations are delegated to the proxy, including how to handle possible failure. 
+As before, the function will be executed and data will be serialized and deserialized by the `ArkTS` runtime. 
+Because the result of `lookup<ArkTS>` is `Extern<ArktTS>` it will instruct the proxy to interpret `.names` as a field access, which will have the type also `Extern<ArkTS>`. 
+Finally it will produce a Cangjie `String` type and bind it to the local `ln`. 
 
 
 
