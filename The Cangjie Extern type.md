@@ -1,16 +1,15 @@
 Main feedback points
-* ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic` 
-* remove the implementation hints or mark as asides
-* language support for errors and exceptions (I disagree)
-  * Base Exception or Effect
-* use `foreign` for functions
-  * safe / unsafe? 
-* where is `Extern` in the type hierarchy?
-  * between Any and Nothing, separate
+* ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
+* ✅ use `foreign` for functions
 * associate types with external runtimes to prevent x:Ext = e:Ext runtime errors
   * Extern<T> where T is the type of the VM
-* use explicit type casts to Cangjie
-  * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
+* remove the implementation hints or mark as asides
+* language support for errors and exceptions 
+  * Base Exception or Effect
+* where is `Extern` in the type hierarchy?
+  * between Any and Nothing, separate
+  * use explicit type casts to Cangjie?
+    * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
 * illustrate all rules with examples
 * parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
   * v.e send the parse tree to the VM
