@@ -12,7 +12,7 @@ Main feedback points
   * use explicit type casts to Cangjie?
     * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
 * illustrate all rules with examples
-* parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
+* ✅ parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
     * v.e send the parse tree to the VM
   * e.id for id a mangled identifier (excape)
     * up to proxy provider to give a mapping
@@ -253,16 +253,48 @@ The type `Extern<T>` can be used to instantiate a generic, for instance `Array<E
 
 ## Dynamic features
 
-A value of type `Extern` is dynamic in the sense that it can be decorated with arbitrary member access and method access operations. 
-The type of the member and the return type of the method are always `Extern` and they remain associated with the same proxy. 
+A value of type `Extern<T>` is dynamic in the sense that it can be decorated with arbitrary member access and method access operations. 
+The type of the member and the argument and return type of the method are always `Extern<T>` and they remain associated with the same proxy. 
 
-If `e: Extern` is a variable or expression and `id` is a valid Cangjie identifier then `e.id: Extern` is legal. 
-Behind the scenes the proxy associated with `e` will be sent the identifier `id` as a string and it will be up to the proxy to resolve it. 
+If `e` is a maximal expression of `Extern<T>` it will be evaluated by the runtime of `T`, which will receive the parse tree of `e` for evaluation. 
+By *maximal* we mean that it is not a subexpression of a larger `Extern<T>` expression. 
+The typing rules of Cangjie apply, taking the rules for `External` into consideration. 
 
-Similarly, `e.id(e1, e2, ...): Extern` is also legal if the types of `e1`, `e2`, etc. are Cangjie types. 
-The runtime of `e` will be sent the identifier `id` and instructed to call a function of that name on the runtime with arguments the value of `e1`, `e2`, etc. These values have known CJ types and the proxy must handle their conversion to the data the runtime requires. 
-It is illegal (for the same reasons discussed in the assignment of `Extern` to `Extern`) for the arguments to be `Extern`, as they may be transferred from one runtime to another. 
-The decision to be strict or permissive should be consistent to that made in the case of assignment. 
+*Note:* that the mapping of Cangjie identifiers cannot be assumed to be perfectly mapped onto the external runtime identifier, as lexical conversions may be different. It is the responsibility of the externally provided runtime to manage and document this mapping. 
+
+### Examples
+
+Consider two runtimes `vmpy: Extern<Python>` and `vmjs: Extern<ArkTS>`. 
+
+The following code is legal:
+
+```cangjie
+vmjs.add(3, 4) // the type is Extern<ArkTS>
+```
+The type of add is `(Extern<ArkTS>, Extern<ArkTS>) -> Extern<ArkTS>` and the arguments 3 and 4 type check. 
+The parse tree will be sent to the `ArkTS` runtime. 
+
+The following code is illegal: 
+
+```cangjie
+vmjs.add(vmpy.x, vmpy.y) // type error
+```
+The arguments have type `Extern<Python>` which cannot be converted to `Extern<ArkTS>`, therefore producing a type error. 
+
+The following code is legal: 
+
+```cangjie
+func f(z: Extern<Python>): Int32 {
+  let n: Int32 = x
+  return n
+}
+
+vmjs.add(f(vmpy.x), f(vmpy.y)) // the type is Extern<ArkTS>
+```
+
+The `Python` runtime will process the subexpressions `vmpy.x` and `vmpy.y`. 
+The function `f` will convert `Extern<Python>` to `Int32`. 
+The `ArkTS` runtime will process the subexpression `vmjs.add(...)`, which will also involve orchestrating the evaluation of the subexpressions for `Python` above. 
 
 
 
