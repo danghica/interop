@@ -168,7 +168,7 @@ The rules for using `Extern` types and let-bound variables are as follows:
 > The use of an explicit cast has been explicitly considered but it has three problems:
 > *Syntactic:* It is exceedingly verbose (`(e as T).getOrThrow()`) on each occurrence of a conversion.
 > *Semantic:* When the runtime type `Extern<U>` of e is a subtype of T, the value of e as T is Some(e); otherwise, the value is None. However, `Extern<U>` is not a subtype of `T`.
-> *Performance:* Creating option types has a noticeable overhead while communicating with external runtimes (particularly ArkTS) is often performance-critical
+> *Performance:* Creating option types has a noticeable overhead while communicating with external runtimes (particularly ArkTS) is often performance-sensitive.
    
 
 ### Using `var`
@@ -238,7 +238,7 @@ Unlike `foreign func` external functions obtained via the dynamic feature of `Ex
 For instance, a function changes the colour of some `ArkUI` button object `b; Extern<ArkTS>` can be created as
 
 ```cangjie
-let setbColor : Color -> Unit = { (c: External<ArkTS>) => b.setColor(c) }
+let setbColor : (Color) -> Unit = { (c: External<ArkTS>) => b.setColor(c) }
 ```
 
 where `Color` is some internal Cangjie type for storing colour information. 
@@ -409,7 +409,7 @@ class Rectangle {
 // Assume a simple sample API to the external runtime
 // Assume Rectangle is in module 'geometry'
 class VirtualMachine {
-  public func import(module: String): Extern<ArkTS> 
+  public func importModule(module: String): Extern<ArkTS> 
 }
 
 // ----------------------------------------------
@@ -417,7 +417,7 @@ class VirtualMachine {
 
 // first Create proxy to an external runtime
 let vm = new VirtualMachine()
-let r = Rectangle(vm.import("geometry"))
+let r = Rectangle(vm.importModule("geometry"))
 r.width = 3.0
 r.height = 2.0
 let a = r.area()
