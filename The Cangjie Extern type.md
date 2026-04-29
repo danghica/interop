@@ -15,11 +15,13 @@ Main feedback points
   * e.id for id a mangled identifier (excape)
     * up to proxy provider to give a mapping
   * both points above: don't break parser
-* no rules for creation (just examples)
+* ✅ no rules for creation (just examples)
 * 'Rectangle' compare with current approaches
 * language support for errors and exceptions 
   * Base Exception or Effect
   * Conversion or interpretation errors
+ 
+  
 # The Cangjie `Extern` type
 
 
@@ -33,10 +35,10 @@ We refer to other Cangjie type, for contrast, as *internal* Cangjie types.
 
 When handling such values the following principles apply:
 
-* Cangjie makes no assumptions about these values in terms of types (at language level) or memory layout (at compiler and runtime level). 
-* `Extern<T>` values can be mapped into internal Cangjie values by special third-party libraries which are registered with the compiler
-* The type `T` in `Extern<T>` is used to distinguish between several runtimes and must always implement the interface `ExternalRuntime`. 
-* `Extern<T>` values offer a special set of dynamic-type capability.   
+* Cangjie makes no assumptions about these values in terms of types (at language level) or memory layout (at compiler and runtime level).
+* * The type `T` in `Extern<T>` is used to distinguish between several runtimes and must always implement the interface `ExternalRuntime`. 
+* `Extern<T>` values can be converted to and from internal-typed values by special libraries which are registered with the compiler. The failure of this conversion will raise the `ExternConversion<T>` exception. 
+* `Extern<T>` values offer a special set of dynamic-type capability. Errors involving dynamic code execution by the runtime `T` will raise the `ExternDynamic` exception. 
    
 
 
@@ -151,8 +153,8 @@ Consider `extexp` an expression that has `Extern<R>` type and `cjexp` an express
 The rules for using `Extern` types and let-bound variables are as follows:
 
 1. `let x = extexp` and `let x: Extern<R> = extexp` are correct and equivalent and will result in a variable `x` of type `Extern<R>` having the value produced by `extexp` and linked to the runtime `R`. 
-2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the Cangjie `T` type and giving that value to `x`.
-3. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`.
+2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the Cangjie `T` type and giving that value to `x`; if the conversion fails then `ExternConversion<R>` is thrown. 
+3. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversion<R>` is thrown. 
 4. `let x: Extern<S> = extexp` is incorrect if `R` and `S` are not equal. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
 
     ```cangjie
@@ -172,8 +174,8 @@ The rules for using `Extern` types and let-bound variables are as follows:
 
 The rules for using `Extern` types and var-bound variables are similar to those for `let`.
 
-1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp`, linked to runtime `R`. 
-2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value. 
+1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp`, linked to runtime `R`; if the conversion fails then `ExternConversion<R>` is thrown. 
+2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value; if the conversion fails then `ExternConversion<R>` is thrown. 
 3. `var x: Extern<S> = cjexp` is incorrect if `R` and `S` are distinct, as the two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. 
 
 The same rules apply to initializing assignment, i.e. when there is some code between the variable declaration and the initial assignment for the above cases. 
@@ -196,28 +198,13 @@ x = extexp  // correct if and only if R=S
 
 The rules for assignment involving `Extern` involve the same implict converstions as before, disallowing the case of `Extern<R>` and `Extern<S>` when `R` and `S` are distinct.
 
-1. If `var x: T` then `x = extexp` is correct. The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`. 
-2. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs. 
+1. If `var x: T` then `x = extexp` is correct. The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`; if the conversion fails then `ExternConversion<R>` is thrown. 
+2. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs; if the conversion fails then `ExternConversion<R>` is thrown. 
 3. If `x: Extern<S>` then `x = extexp` is correct if and only if `R` is `S`. If the two runtimes are not the same there is no schema for converting between the two. 
 
 
 
 ## Function calls
-
-### External functions
-
-A special type of `foreign` functions is not required in association with `Extern` types since the dynamic mechanism of `Extern` is sufficient for the purpose. 
-If `vm: Extern<T>` then `vm.f(e1, e2)` will call an external function at `vm` with arguments `e1, e2`, returning also `Extern<T>`. 
-Unlike `foreign func` external functions obtained via the dynamic feature of `Extern` are not subject to the restiction of being called in an `unsafe` block and can be treated as first-class citizens. 
-
-For instance, a function changes the colour of some `ArkUI` button object `b; Extern<ArkTS>` can be created as
-
-```cangjie
-let setbColor : Color -> Unit = { (c: External<ArkTS>) => b.setColor(c) }
-```
-
-where `Color` is some internal Cangjie type for storing colour information. 
-
 
 ### Internal functions
 
@@ -234,11 +221,27 @@ It is also legal for a function to select between two `Extern<T>` values.
 func sel<T>(x: Extern<T>, y: Extern<T>): Extern<T> { if (test()) { x } else { y } }
 ```
 
-The same implicit conversions rules already discussed for variables apply:
-
+The same implicit conversions rules already discussed for variables apply; if the conversion fails then `ExternConversion` is thrown. 
+Therefore:
 * it is legal to pass an `Extern<T>` value to a function expecting an internally-typed argument.
 * it is legal to pass an internally-typed argument value to a function expecting an `Extern<T>` argument.
 * it is legal to pass an `Extern<T>` value to a function as an `Extern<R>` if and only if `R` and `T` are the same. 
+
+
+### External functions
+
+A special type of `foreign` functions is not required in association with `Extern` types since the dynamic mechanism of `Extern` is sufficient for the purpose. 
+If `vm: Extern<T>` then `vm.f(e1, e2)` will call an external function at `vm` with arguments `e1, e2`, returning also `Extern<T>`. 
+Unlike `foreign func` external functions obtained via the dynamic feature of `Extern` are not subject to the restiction of being called in an `unsafe` block and can be treated as first-class citizens. 
+
+For instance, a function changes the colour of some `ArkUI` button object `b; Extern<ArkTS>` can be created as
+
+```cangjie
+let setbColor : Color -> Unit = { (c: External<ArkTS>) => b.setColor(c) }
+```
+
+where `Color` is some internal Cangjie type for storing colour information. 
+
 
 
 
@@ -271,21 +274,22 @@ let z = y as Int32
 >  // the behaviour of as is no longer polymorphic on the type: internal does test and copy, external does conversion
 > }
 > ```
+> Note that the typing discipline for polymorphic functions is such that implicit converstions are not required. 
 
 ## Dynamic features
 
 A value of type `Extern<T>` is dynamic in the sense that it can be decorated with arbitrary member access and method access operations. 
 The type of the member and the argument and return type of the method are always `Extern<T>` and they remain associated with the same proxy. 
 
-If `e` is a maximal expression of `Extern<T>` it will be evaluated by the runtime of `T`, which will receive the parse tree of `e` for evaluation. 
+If `e` is a maximal expression of `Extern<T>` it will be evaluated by the runtime of `T`, which will receive the parse tree of `e` for evaluation. If the evaluation fails then `ExternDynamic<T>` is thrown. 
 By *maximal* we mean that it is not a subexpression of a larger `Extern<T>` expression. 
-The typing rules of Cangjie apply, taking the rules for `External` into consideration. 
+The typing rules of Cangjie apply, taking the rules for `Extern` into consideration. 
 
 *Note:* that the mapping of Cangjie identifiers cannot be assumed to be perfectly mapped onto the external runtime identifier, as lexical conversions may be different. It is the responsibility of the externally provided runtime to manage and document this mapping. 
 
 ### Examples
 
-Consider two runtimes `vmpy: Extern<Python>` and `vmjs: Extern<ArkTS>`. 
+Consider two dynamic values related to different runtimes `vmpy: Extern<Python>` and `vmjs: Extern<ArkTS>`. 
 
 The following code is legal:
 
