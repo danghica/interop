@@ -20,6 +20,7 @@ Main feedback points
 * ✅ language support for errors and exceptions 
   * Base Exception or Effect
   * Conversion or interpretation errors
+* Maybe consider finalizers, since they are mostly used for interop? 
  
   
 # The Cangjie `Extern` type
