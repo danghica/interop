@@ -5,8 +5,6 @@ Main feedback points
 * ✅ associate types with external runtimes to prevent `x = e` runtime errors when both are `Extern`
   * `Extern<T>` where `T` is the type of the VM
 * ✅ remove the implementation hints or mark as asides
-* ✅ language support for errors and exceptions 
-  * Base Exception or Effect
 * ✅ where is `Extern` in the type hierarchy?
   * between Any and Nothing, separate
   * use explicit type casts to Cangjie?
@@ -19,7 +17,9 @@ Main feedback points
   * both points above: don't break parser
 * no rules for creation (just examples)
 * 'Rectangle' compare with current approaches
-
+* language support for errors and exceptions 
+  * Base Exception or Effect
+  * 
 # The Cangjie `Extern` type
 
 
