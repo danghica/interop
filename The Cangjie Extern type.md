@@ -1,4 +1,4 @@
-Main feedback points
+Main changes
 * ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
 * ✅ use `foreign` for functions
   * obsoleted by the use of `Extern<T>`
@@ -332,6 +332,26 @@ Note that variables `x` and `y` do not exist in `vmpy` or if function `add` does
 There is no Cangjie constructor for `Extern` and there is no specific Cangjie language support for constructing `Extern` data but the developer can do it in several ways. 
 `Extern<T>` values are produced by dynamic `Extern` expressions or are registered directly with the compiler via a special mechanism. 
 
+
+
+## Implementation and API
+
+In order to support the type `External<T>` a type `T` must be implemented which will implement a new standard library interface `RunTime`.
+
+```cangjie
+public interface Runtime {
+   public func eval(e: std.ast.expr): Extern<Runtime>
+   public func serialize<T>(e: Extern<Runtime>): T
+   public func deserialize<T>(e: T): Extern<Runtime>
+}
+```
+
+The compiler will provide an intrinsic function which can 'seed' a runtime with its first `Extern` value. 
+
+```cangjie
+@intrinsic
+func bindExtern<T>(x: T) : Extern<T>
+```
 
 
 ## External classes (example usage)
