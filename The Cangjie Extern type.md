@@ -9,15 +9,15 @@ Main feedback points
   * between Any and Nothing, separate
   * use explicit type casts to Cangjie?
     * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
-* illustrate all rules with examples
+* ✅ illustrate all rules with examples
 * ✅ parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
     * v.e send the parse tree to the VM
   * e.id for id a mangled identifier (excape)
     * up to proxy provider to give a mapping
   * both points above: don't break parser
 * ✅ no rules for creation (just examples)
-* 'Rectangle' compare with current approaches
-* language support for errors and exceptions 
+* ✅'Rectangle' compare with current approaches
+* ✅ language support for errors and exceptions 
   * Base Exception or Effect
   * Conversion or interpretation errors
  
@@ -276,6 +276,7 @@ let z = y as Int32
 > ```
 > Note that the typing discipline for polymorphic functions is such that implicit converstions are not required. 
 
+
 ## Dynamic features
 
 A value of type `Extern<T>` is dynamic in the sense that it can be decorated with arbitrary member access and method access operations. 
@@ -321,13 +322,13 @@ The `Python` runtime will process the subexpressions `vmpy.x` and `vmpy.y`.
 The function `f` will convert `Extern<Python>` to `Int32`. 
 The `ArkTS` runtime will process the subexpression `vmjs.add(...)`, which will also involve orchestrating the evaluation of the subexpressions for `Python` above. 
 
+Note that variables `x` and `y` do not exist in `vmpy` or if function `add` does not exist in `vmjs` then the `ExternDynamic<Python>` and `ExternDynamic<ArkTS>` are thrown, respectively. 
+
 
 
 ## Creation of `Extern` values
 
-Values of type `Extern` can only be created by the proxies, presumably by interfacing with the foreign runtime in scenario-dependent ways. 
 There is no Cangjie constructor for `Extern` and there is no specific Cangjie language support for constructing `Extern` data but the developer can do it in several ways. 
-
 `Extern<T>` values are produced by dynamic `Extern` expressions or are registered directly with the compiler via a special mechanism. 
 
 
