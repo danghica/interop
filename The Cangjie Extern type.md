@@ -19,7 +19,7 @@ Main feedback points
 * 'Rectangle' compare with current approaches
 * language support for errors and exceptions 
   * Base Exception or Effect
-  * 
+  * Conversion or interpretation errors
 # The Cangjie `Extern` type
 
 
