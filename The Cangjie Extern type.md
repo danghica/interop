@@ -206,7 +206,8 @@ The rules for assignment involving `Extern` involve the same implict converstion
 
 ## Function calls
 
-> TODO: How do we know a foreign func has runtime T? Maybe require at least one argument or result to be Extern<T>? 
+> TODO: How do we know a foreign func has runtime T? Maybe require at least one argument or result to be Extern<T>?
+> Maybe ban functions and just keep methods? 
 
 It is legal for function parameters and results to use `Extern` and for function types to mention `Extern`. 
 For instance the identity function works on extern values:
