@@ -268,7 +268,7 @@ let z = y as Int32
 > ```cangjie
 > func f<U, V>(x: U, y: V) {
 >  let z = x as V
->  // the behaviour of as is no longer polymorphic on the type 
+>  // the behaviour of as is no longer polymorphic on the type: internal does test and copy, external does conversion
 > }
 > ```
 
@@ -322,19 +322,13 @@ The `ArkTS` runtime will process the subexpression `vmjs.add(...)`, which will a
 ## Creation of `Extern` values
 
 Values of type `Extern` can only be created by the proxies, presumably by interfacing with the foreign runtime in scenario-dependent ways. 
-There is no Cangjie constructor for `Extern`. 
+There is no Cangjie constructor for `Extern` and there is no specific Cangjie language support for constructing `Extern` data but the developer can do it in several ways. 
 
-There is no specific Cangjie language support for constructing `Extern` data but the developer can do it in several ways. 
-
-1. The easiest way is to call foreign functions which produce new `Extern` data, as shown in the preliminary example (`lookup` function). 
-2. Use factory methods and pass the name of the type we want created as an argument. For example imagine a proxy that manages access to an ArkTS runtime. That proxy may have as part of its API a method `createObject(typeName: String): Extern` which creates a remote object of type `typeName` in that runtime and return it as `Extern`. For instance `createObject("JSRectangle")` will instruct the ArkTS runtime to create a `JSRectangle` object and return it as `Extern` to the Cangjie runtime. 
-3. Use the dynamic features of `Extern` to pass constructors. For instance if `vm` is some `Extern` value then `vm.JSRectangle(1, 2)`, which is legal syntax under the dynamic features of `Extern`, may be able to identify `JSRectangle` as a constructor of an ArkTS object and issue the correct call to the runtime. 
-
-In order to preserve the generality of interaction between Cangjie and other runtimes via `Extern` no specific support will be provided for external constructors. 
+`Extern<T>` values are produced by dynamic `Extern` expressions or are registered directly with the compiler via a special mechanism. 
 
 
 
-## External classes
+## External classes (example usage)
 
 Direct language support for external classes (i.e. types of objects residing in a foreign runtime) is not offered. 
 Accessing such objects is done using the dynamic features of `Extern`. 
@@ -344,14 +338,14 @@ This design pattern can be automated with simple macros due to its regular natur
 ```cangjie
 class Rectangle {
     // The external object 
-    private var blob: Extern
+    private var blob: Extern<ArkTS>
 
     // The vm managing the object
-    private var vm: Extern
+    private var vm: Extern<ArkTS>
 
     // The Cangjie constructor calls the external constructor
     // to initialize the foreign object
-    public Rectangle(vm: Extern) {
+    public Rectangle(vm: Extern<ArkTS>) {
       this.vm = vm
       this.blob = vm.Rectangle() 
     }
@@ -389,7 +383,7 @@ class Rectangle {
 // Assume a simple sample API to the external runtime
 // Assume Rectangle is in module 'geometry'
 class VirtualMachine {
-  public func import(module: String): Extern 
+  public func import(module: String): Extern<ArkTS> 
 }
 
 // ----------------------------------------------
@@ -404,4 +398,5 @@ let a = r.area()
 println(r.height)
 ```
 
+TODO : COMPARE WITH REFLECTION AND WITH NEW PROPOSAL
 
