@@ -1,6 +1,7 @@
 Main feedback points
 * ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
 * ✅ use `foreign` for functions
+  * obsoleted by the use of `Extern<T>`
 * ✅ associate types with external runtimes to prevent `x = e` runtime errors when both are `Extern`
   * `Extern<T>` where `T` is the type of the VM
 * ✅ remove the implementation hints or mark as asides
@@ -12,10 +13,10 @@ Main feedback points
     * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
 * illustrate all rules with examples
 * parsing e.id vs e.id(e, e...); (e.id)() vs e.(id()) 
-  * v.e send the parse tree to the VM
-* e.id for id a mangled identifier (excape)
-  * up to proxy provider to give a mapping
-* both points above: don't break parser
+    * v.e send the parse tree to the VM
+  * e.id for id a mangled identifier (excape)
+    * up to proxy provider to give a mapping
+  * both points above: don't break parser
 * no rules for creation (just examples)
 * 'Rectangle' compare with current approaches
 
@@ -35,23 +36,20 @@ When handling such values the following principles apply:
 * Cangjie makes no assumptions about these values in terms of types (at language level) or memory layout (at compiler and runtime level). 
 * `Extern<T>` values can be mapped into internal Cangjie values by special third-party libraries which are registered with the compiler
 * The type `T` in `Extern<T>` is used to distinguish between several runtimes and must always implement the interface `ExternalRuntime`. 
-* `Extern<T>` values offer a special set of dynamic-type capability. 
+* `Extern<T>` values offer a special set of dynamic-type capability.   
+   
 
-The use of the tag `foreign func` is extended to indicate functions that are supplied by a foreign runtime.
-A function tagged as `foreign` need not be executed in an  `unsafe` block if it is provided by a managed safe runtime such as ArkTS or Python. 
-   
-   
 
 ## Quick introduction
 
 `Extern<T>` is a new type that can be used for variables and functions similarly to other Cangjie types. 
 There are some specific rules which will be discussed below. 
 
-For example the following foreign function looks up geographic location using latitude and longitude and returns a geographical object.
+For example the following function looks up geographic location using latitude and longitude and returns a geographical object.
 The data is `Extern<T>` because it resides in a foreign memory space. 
 
 ```cangjie
-foreign func lookup<T>(lat: Float32, long: Float32): Extern<T>
+func lookup<T>(lat: Float32, long: Float32): Extern<T>
 ```
 
 The geographical object can have arbitrary complexity. 
@@ -206,51 +204,50 @@ The rules for assignment involving `Extern` involve the same implict converstion
 
 ## Function calls
 
-> TODO: How do we know a foreign func has runtime T? Maybe require at least one argument or result to be Extern<T>?
-> Maybe ban functions and just keep methods? 
+### External functions
+
+A special type of `foreign` functions is not required in association with `Extern` types since the dynamic mechanism of `Extern` is sufficient for the purpose. 
+If `vm: Extern<T>` then `vm.f(e1, e2)` will call an external function at `vm` with arguments `e1, e2`, returning also `Extern<T>`. 
+Unlike `foreign func` external functions obtained via the dynamic feature of `Extern` are not subject to the restiction of being called in an `unsafe` block and can be treated as first-class citizens. 
+
+For instance, a function changes the colour of some `ArkUI` button object `b; Extern<ArkTS>` can be created as
+
+```cangjie
+let setbColor : Color -> Unit = { (c: External<ArkTS>) => b.setColor(c) }
+```
+
+where `Color` is some internal Cangjie type for storing colour information. 
+
+
+### Internal functions
 
 It is legal for function parameters and results to use `Extern` and for function types to mention `Extern`. 
 For instance the identity function works on extern values:
 
 ```cangjie
-func id(x: Extern): Extern { return x }
+func id<T>(x: Extern<T>): Extern<T> { return x }
 ```
 
-It is also legal for a function to select between two `Extern` values.
+It is also legal for a function to select between two `Extern<T>` values.
 
 ```cangjie
-func sel(x: Extern, y: Extern): Extern { if (test()) { x } else { y } }
+func sel<T>(x: Extern<T>, y: Extern<T>): Extern<T> { if (test()) { x } else { y } }
 ```
 
-Because of the reasons already discussed for let-bound variables:
+The same implicit conversions rules already discussed for variables apply:
 
-* it is legal to pass an `Extern` value to a function as a Cangjie-typed argument.
-* it is legal to pass an `Extern` value to a function as an `Extern`-typed argument. 
-* it is illegal to pass a Cangjie-typed value as an `Extern` argument
-
-### External functions
-
-The tag `foreign func` indicates that a function is not performed by the current Cangjie runtime. 
-Functions tagged `foreign func` are declaration only, without a function body. 
-External functions must be registered with a proxy using a special compiler-specific mechanism. 
-
-For example: 
-
-```cangjie
-foreign func lookup(lat: Float32, long: Float32): External
-```
-
-Because external function arguments are passed to a foreign runtime, it is unsafe for them to be `Extern`-typed in case their proxies are different.
-The permissive or restrictive approach must be applied consistently here as well. 
+* it is legal to pass an `Extern<T>` value to a function expecting an internally-typed argument.
+* it is legal to pass an internally-typed argument value to a function expecting an `Extern<T>` argument.
+* it is legal to pass an `Extern<T>` value to a function as an `Extern<R>` if and only if `R` and `T` are the same. 
 
 
 
 ## Compound data types
 
 The type `Extern` may participate in the formation of composite data types such as tuples, structs, classes, etc. 
-The type `Extern` can be used to instantiate a generic, for instance `Array<Extern>`. 
+The type `Extern<T>` can be used to instantiate a generic, for instance `Array<Extern<T>>`. 
 
-> Note: The latter feature requires a permissive approach to `Extern` in assignment, otherwise safe assignment for instance at `Array<T>` may be deemed unsafe by the type system when `T` is `Extern`. 
+> TODO : USING EXTERN IN AS T, MIND ANY
 
 
 
