@@ -336,7 +336,7 @@ There is no Cangjie constructor for `Extern` and there is no specific Cangjie la
 
 ## Implementation and API
 
-In order to support the type `External<T>` a type `T` must be implemented which will implement a new standard library interface `RunTime`.
+In order to support the type `External<T>` a type `T` must be implemented which will implement a new standard library interface `Runtime`.
 
 ```cangjie
 public interface Runtime {
