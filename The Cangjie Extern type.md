@@ -1,12 +1,12 @@
 Main feedback points
 * ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
 * ✅ use `foreign` for functions
-* associate types with external runtimes to prevent `x = e` runtime errors when both are `Extern`
+* ✅ associate types with external runtimes to prevent `x = e` runtime errors when both are `Extern`
   * `Extern<T>` where `T` is the type of the VM
-* remove the implementation hints or mark as asides
-* language support for errors and exceptions 
+* ✅ remove the implementation hints or mark as asides
+* ✅ language support for errors and exceptions 
   * Base Exception or Effect
-* where is `Extern` in the type hierarchy?
+* ✅ where is `Extern` in the type hierarchy?
   * between Any and Nothing, separate
   * use explicit type casts to Cangjie?
     * problematic because of subtyping (breaks meaning), syntax (clumsy), slow (option impl)
@@ -196,18 +196,17 @@ x = extexp  // correct if and only if R=S
 
 ### Using assignment
 
-The rules for assignment involving `Extern` are as follows.
+The rules for assignment involving `Extern` involve the same implict converstions as before, disallowing the case of `Extern<R>` and `Extern<S>` when `R` and `S` are distinct.
 
-1. If `x: T` then `x = extexp` is correct. The proxy associated with the result of `extexp` will convert its result to `T`, the type of `x` and assign it to `x`. 
-2. If `x: Extern` is an *initialized* mutable variable then `x = cjexp` is correct. The proxy associated with `x` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs. 
-3. If `x: Extern` is an *uninitialized* mutable variable then `x = cjexp` is incorrect. There is no proxy associated with `x` to convert the result of `cjexp` from `T` to whatever the foreign runtime needs. A compiler error will be issued. **Note:** The case `x = extexp` is correct, as an initializing assignment discussed above. 
-4. If `x: Extern` is an *initialized* mutable variable then `x = extexp` is incorrect. The proxies for `x` or `extexp` may or may not be the same. If they are the same then the proxy could instruct the foreign runtime to perform the assignment. If they are not the same there is no schema for converting between the two. 
-
-> *Obs:* Since assignment of `Extern` to `Extern` may sometimes succeed, and since programs involving `Extern` are not type safe Cangjie can be either strict (compile error) or permissive (compiler warning). In the latter case a special exception marking mismatched proxies should be raised. Note that rules 2-3 become much more useful if a permissive approach to assignment is taken. 
+1. If `var x: T` then `x = extexp` is correct. The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`. 
+2. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs. 
+3. If `x: Extern<S>` then `x = extexp` is correct if and only if `R` is `S`. If the two runtimes are not the same there is no schema for converting between the two. 
 
 
 
 ## Function calls
+
+> TODO: How do we know a foreign func has runtime T? Maybe require at least one argument or result to be Extern<T>? 
 
 It is legal for function parameters and results to use `Extern` and for function types to mention `Extern`. 
 For instance the identity function works on extern values:
