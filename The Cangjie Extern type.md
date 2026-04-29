@@ -174,25 +174,24 @@ The rules for using `Extern` types and let-bound variables are as follows:
 
 The rules for using `Extern` types and var-bound variables are similar to those for `let`.
 
-1. `var x = extexp` and `var x: Extern = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp` and, importantly, access to the proxy managing the value of `extexp`. 
-2. `var x: T = extexp` is correct and will result in the proxy associated with `extexp` converting the value it produces to the Cangjie `T` type and initializing `x` with that value. 
-3. `var x: Extern = cjexp` is incorrect: a new mutable variable `x` is not associated with a proxy so it cannot process the result of type `T` of expression `cjexp`. The compiler will issue a compile error. 
+1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp`, linked to runtime `R`. 
+2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value. 
+3. `var x: Extern<S> = cjexp` is incorrect if `R` and `S` are distinct, as the two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. 
 
 The same rules apply to initializing assignment, i.e. when there is some code between the variable declaration and the initial assignment for the above cases. 
-For instance, this is correct:
 
 ```Cangjie
-var x: Extern
+var x: Extern<R>
 // some code
-x = extexp
-```
+x = extexp // correct
 
-This will lead to a compile error:
-
-```Cangjie
-var x: Extern
+var x: Extern<R>
 // some code
-x = cjexp
+x = cjexp  // correct
+
+var x: Extern<S>
+// some code
+x = extexp  // correct if and only if R=S
 ```
 
 ### Using assignment
