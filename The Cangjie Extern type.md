@@ -29,36 +29,36 @@ Main changes
 
 ## Introduction
 
-The proposed type `Extern<T>` is the type of values that reside in a *foreign memory space* relative to Cangjie. 
-These values can be bound to variables and function arguments, or can be produced by expressions. 
+The proposed type `Extern<T>` is the type of references to values that reside in a *foreign memory space* relative to Cangjie. 
+These references can be bound to variables and function arguments, or can be produced by expressions. 
 By a "foreign memory space" we mean memory that is managed by a different runtime or virtual machine than Cangjie, for instance ArkTS, JavaScript, or Python. We call it a *foreign runtime*.
 We refer to other Cangjie type, for contrast, as *internal* Cangjie types. 
 
-When handling such values the following principles apply:
+When handling such references the following principles apply:
 
 * Cangjie makes no assumptions about these values in terms of types (at language level) or memory layout (at compiler and runtime level).
-* * The type `T` in `Extern<T>` is used to distinguish between several runtimes and must always implement the interface `ExternalRuntime`. 
-* `Extern<T>` values can be converted to and from internal-typed values by special libraries which are registered with the compiler. The failure of this conversion will raise the `ExternConversion<T>` exception. 
-* `Extern<T>` values offer a special set of dynamic-type capability. Errors involving dynamic code execution by the runtime `T` will raise the `ExternDynamic` exception. 
+* The type `T` in `Extern<T>` is used to distinguish between several runtimes and must always implement the interface `Runtime`. 
+* `Extern<T>` values can be converted to and from internal-typed values by special libraries which are registered with the compiler. The failure of this conversion will raise an `ExternConversionException`. 
+* `Extern<T>` values offer a special set of capabilities usually associated with dynamic typing. Errors involving dynamic code execution by the runtime `T` will raise an `ExternDynamicException`. 
    
 
 
 ## Quick introduction
 
-`Extern<T>` is a new type that can be used for variables and functions similarly to other Cangjie types. 
-There are some specific rules which will be discussed below. 
+`Extern<T>` is a new Cangjie type that is governed by some specific rules which will be discussed below. 
+Before giving all the details we show a flavour of how it is used. 
 
 For example the following function looks up geographic location using latitude and longitude and returns a geographical object.
-The data is `Extern<T>` because it resides in a foreign memory space. 
+The data is `Extern<ArkTS>` because it resides in the foreign memory space of an ArkTS virtual machine. 
 
 ```cangjie
-func lookup<T>(lat: Float32, long: Float32): Extern<T>
+func lookup(lat: Float32, long: Float32): Extern<ArkTS>
 ```
 
-The geographical object can have arbitrary complexity. 
+The returned geographical object can have arbitrary complexity. 
 For instance it can be a simple point landmark such as the Space Needle in Seattle, informally represented as
 
-```JSON
+```
   coordinates: [-122.3493, 47.6205]
   name: "Space Needle",
   city: "Seattle",
@@ -67,7 +67,7 @@ For instance it can be a simple point landmark such as the Space Needle in Seatt
 
 Or it can be something more complex, such as the oval contour of the Colosseum in Rome:
 
-```JSON
+```
   name: "The Colosseum",
   amenity: "historic_site",
   material: "travertine",
@@ -87,7 +87,7 @@ But in many scenarios the application developer may want to explore the returned
 
 ### Simple scenario: precise typing
 
-In this application scenario the developer knows that the location data is always a landmark, therefore it can be cast into an internal Cangjie type. 
+In this application scenario the developer knows that the location data is always a landmark, therefore it can be cast into an internal type. 
 
 ```cangjie
 struct Landmark {
@@ -103,13 +103,13 @@ where `Category` is some `enum` defined elsewhere.
 Then the following code uses the lookup function to retrieve a landmark `lm`:
 
 ```cangjie
-let lm: Landmark = lookup<ArkTS>(-122.3493, 47.6205)
+let lm: Landmark = lookup(-122.3493, 47.6205)
 println(lm.name) // will print "Space Needle"
 ```
 
 The way the developer should understand this code is as follows.
-The return type `Extern<T>` of the function `lookup` needs to be instantiated to the type of some elsewhere defined runtime (`ArkTS`) which will tell who is responsible for executing `lookup` and serializing and deserializing data into an internal Cangjie value. 
-The local variable will therefore store a `Landmark` object extracted from the `Extern<ArkTS>` returned by the `lookup<ArkTS>`. 
+The return type `Extern<ArkTS>` of the function `lookup` needs to be instantiated to the type of some elsewhere defined runtime (`ArkTS`) which will tell who is responsible for executing `lookup` and serializing and deserializing data into an internal Cangjie value. 
+The local variable will therefore store a `Landmark` object extracted from the `Extern<ArkTS>` returned by the `lookup`. 
 
 Also note that this process may fail, case in which a special exception, to be discussed later, will be raised. 
 
@@ -124,13 +124,13 @@ In this case the Cangjie code will use the dynamic features of `Extern<T>`: it i
 The following code retrieves a landmark name `ln`:
 
 ```cangjie
-let ln: String = lookup<ArkTS>(12.487, 41.893).name
+let ln: String = lookup(12.487, 41.893).name
 println(ln) // will print "Colosseum"
 ```
 
 In this case what happens is the following: 
 As before, the function will be executed and data will be serialized and deserialized by the `ArkTS` runtime. 
-Because the result of `lookup<ArkTS>` is `Extern<ArktTS>` it will instruct the proxy to interpret `.names` as a field access, which will have the type also `Extern<ArkTS>`. 
+Because the result of `lookup` is `Extern<ArktTS>` it will instruct the proxy to interpret `.name` as a field access, which will have the type also `Extern<ArkTS>`. 
 Finally it will produce a Cangjie `String` type and bind it to the local `ln`. 
 
 
@@ -154,14 +154,14 @@ Consider `extexp` an expression that has `Extern<R>` type and `cjexp` an express
 The rules for using `Extern` types and let-bound variables are as follows:
 
 1. `let x = extexp` and `let x: Extern<R> = extexp` are correct and equivalent and will result in a variable `x` of type `Extern<R>` having the value produced by `extexp` and linked to the runtime `R`. 
-2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the Cangjie `T` type and giving that value to `x`; if the conversion fails then `ExternConversion<R>` is thrown. 
-3. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversion<R>` is thrown. 
-4. `let x: Extern<S> = extexp` is incorrect if `R` and `S` are not equal. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
+2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the Cangjie `T` type and giving that value to `x`; if the conversion fails then `ExternConversionException` is thrown. 
+3. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
+4. `let x: Extern<S> = extexp` is incorrect if `R` and `S` are not the same. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
 
     ```cangjie
-    let x: Extern<Python> = lookup<ArkTS>(12.2, 34.1).name // type error
-    let s: String = lookup<ArkTS>(12.2, 34.1).name         // converted by ArkTS
-    let x: Extern<Python> = s                              // converted by Python
+    let x: Extern<Python> = lookup(12.2, 34.1).name // type error Python != ArkTS
+    let s: String = lookup(12.2, 34.1).name         // converted by ArkTS
+    let x: Extern<Python> = s                       // converted by Python
     ```
 
 > *Note:* It is a special property of the type `Extern<T>` to be automatically converted to and from internal types wherever the the type of the context requires.
@@ -175,9 +175,9 @@ The rules for using `Extern` types and let-bound variables are as follows:
 
 The rules for using `Extern` types and var-bound variables are similar to those for `let`.
 
-1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp`, linked to runtime `R`; if the conversion fails then `ExternConversion<R>` is thrown. 
-2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value; if the conversion fails then `ExternConversion<R>` is thrown. 
-3. `var x: Extern<S> = cjexp` is incorrect if `R` and `S` are distinct, as the two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. 
+1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp`, linked to runtime `R`; if the conversion fails then `ExternConversionException` is thrown. 
+2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value; if the conversion fails then `ExternConversionException` is thrown. 
+3. `var x: Extern<S> = extexp` is incorrect if `R` and `S` are distinct, as the two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. 
 
 The same rules apply to initializing assignment, i.e. when there is some code between the variable declaration and the initial assignment for the above cases. 
 
@@ -192,15 +192,15 @@ x = cjexp  // correct
 
 var x: Extern<S>
 // some code
-x = extexp  // correct if and only if R=S
+x = extexp  // correct if and only if R and S are the same
 ```
 
 ### Using assignment
 
 The rules for assignment involving `Extern` involve the same implict converstions as before, disallowing the case of `Extern<R>` and `Extern<S>` when `R` and `S` are distinct.
 
-1. If `var x: T` then `x = extexp` is correct. The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`; if the conversion fails then `ExternConversion<R>` is thrown. 
-2. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs; if the conversion fails then `ExternConversion<R>` is thrown. 
+1. If `var x: T` then `x = extexp` is correct. The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`; if the conversion fails then `ExternConversionException` is thrown. 
+2. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs; if the conversion fails then `ExternConversionException` is thrown. 
 3. If `x: Extern<S>` then `x = extexp` is correct if and only if `R` is `S`. If the two runtimes are not the same there is no schema for converting between the two. 
 
 
@@ -222,7 +222,7 @@ It is also legal for a function to select between two `Extern<T>` values.
 func sel<T>(x: Extern<T>, y: Extern<T>): Extern<T> { if (test()) { x } else { y } }
 ```
 
-The same implicit conversions rules already discussed for variables apply; if the conversion fails then `ExternConversion` is thrown. 
+The same implicit conversions rules already discussed for variables apply; if the conversion fails then `ExternConversionException` is thrown. 
 Therefore:
 * it is legal to pass an `Extern<T>` value to a function expecting an internally-typed argument.
 * it is legal to pass an internally-typed argument value to a function expecting an `Extern<T>` argument.
@@ -231,14 +231,14 @@ Therefore:
 
 ### External functions
 
-A special type of `foreign` functions is not required in association with `Extern` types since the dynamic mechanism of `Extern` is sufficient for the purpose. 
+A special type of `foreign` functions is not required in association with `Extern` types since the dynamic mechanism of `Extern` is sufficient for the purpose (discussed later). 
 If `vm: Extern<T>` then `vm.f(e1, e2)` will call an external function at `vm` with arguments `e1, e2`, returning also `Extern<T>`. 
 Unlike `foreign func` external functions obtained via the dynamic feature of `Extern` are not subject to the restiction of being called in an `unsafe` block and can be treated as first-class citizens. 
 
-For instance, a function changes the colour of some `ArkUI` button object `b; Extern<ArkTS>` can be created as
+For instance, a function changes the colour of some `ArkUI` button object `b: Extern<ArkTS>` can be created as
 
 ```cangjie
-let setbColor : (Color) -> Unit = { (c: External<ArkTS>) => b.setColor(c) }
+let setbColor : (Color) -> Unit = { (c: Color) => b.setColor(c) }
 ```
 
 where `Color` is some internal Cangjie type for storing colour information. 
@@ -248,7 +248,7 @@ where `Color` is some internal Cangjie type for storing colour information.
 
 ## Typing considerations
 
-The type `Extern` is a subtype of `Any` but otherwise unrelated to the hierarchy of internal types. 
+The type `Extern<T>` is a subtype of `Any` but otherwise unrelated to the hierarchy of internal types. 
 The type `Extern<T>` may participate in the formation of composite data types such as tuples, structs, classes, etc. 
 The type `Extern<T>` can be used to instantiate a generic, for instance `Array<Extern<T>>`. 
 The type `Extern<T>` is invariant in `T`. 
@@ -311,10 +311,7 @@ The arguments have type `Extern<Python>` which cannot be converted to `Extern<Ar
 The following code is legal: 
 
 ```cangjie
-func f(z: Extern<Python>): Int32 {
-  let n: Int32 = x
-  return n
-}
+func f(z: Extern<Python>): Int32 { z }
 
 vmjs.add(f(vmpy.x), f(vmpy.y)) // the type is Extern<ArkTS>
 ```
@@ -323,7 +320,7 @@ The `Python` runtime will process the subexpressions `vmpy.x` and `vmpy.y`.
 The function `f` will convert `Extern<Python>` to `Int32`. 
 The `ArkTS` runtime will process the subexpression `vmjs.add(...)`, which will also involve orchestrating the evaluation of the subexpressions for `Python` above. 
 
-Note that variables `x` and `y` do not exist in `vmpy` or if function `add` does not exist in `vmjs` then the `ExternDynamic<Python>` and `ExternDynamic<ArkTS>` are thrown, respectively. 
+Note that variables `x` and `y` do not exist in `vmpy` or if function `add` does not exist in `vmjs` then the `ExternDynamicException` and `ExternDynamicException` are thrown, respectively. 
 
 
 
@@ -343,6 +340,7 @@ public interface Runtime {
    public func eval(e: std.ast.expr): Extern<Runtime>
    public func serialize<T>(e: Extern<Runtime>): T
    public func deserialize<T>(e: T): Extern<Runtime>
+   // maybe finalizer interface
 }
 ```
 
