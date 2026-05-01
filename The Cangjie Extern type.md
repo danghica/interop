@@ -1,4 +1,4 @@
-Change log
+### Change log
 * ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
 * ✅ use `foreign` for functions
   * obsoleted by the use of `Extern<T>`
