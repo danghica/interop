@@ -1,4 +1,4 @@
-Main changes
+Change log
 * ✅ simpler motivating examples; JSON is not a motivation for interop but for `dynamic`
 * ✅ use `foreign` for functions
   * obsoleted by the use of `Extern<T>`
@@ -20,9 +20,10 @@ Main changes
 * ✅ language support for errors and exceptions 
   * Base Exception or Effect
   * Conversion or interpretation errors
-* Maybe consider finalizers, since they are mostly used for interop?
 * ✅ Relationship with the type `Any`
-* Is the `T` in `Extern<T>` a singleton?
+* ✅ Is the `T` in `Extern<T>` a singleton?
+* Maybe consider finalizers, since they are mostly used for interop?
+
   
 # The Cangjie `Extern` type
 
