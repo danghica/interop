@@ -26,8 +26,6 @@ Main changes
   
 # The Cangjie `Extern` type
 
-
-
 ## Introduction
 
 The proposed type `Extern<T>` is the type of references to values that reside in a *foreign memory space* relative to Cangjie. 
@@ -42,7 +40,6 @@ When handling such references the following principles apply:
 * `Extern<T>` values can be converted to and from internal-typed values by special libraries which are registered with the compiler. The failure of this conversion will raise an `ExternConversionException`. 
 * `Extern<T>` values offer a special set of capabilities usually associated with dynamic typing. Errors involving dynamic code execution by the runtime `T` will raise an `ExternDynamicException`. 
    
-
 
 ## Quick introduction
 
@@ -135,7 +132,6 @@ Because the result of `lookup` is `Extern<ArktTS>` it will instruct the proxy to
 Finally it will produce a Cangjie `String` type and bind it to the local `ln`. 
 
 
-
 ### Design philosophy and general rules
 
 The type `Extern<T>` is inspired by that of `dynamic` in C#, except that it must be explicitly associated to an external runtime `T`.
@@ -144,26 +140,28 @@ Unlike `dynamic`, which suspends the normal type rules in order to facilitate in
 The rule for using `Extern<T>` is as follows (in the context of [Conversion Between Value Types](https://cangjie-lang.cn/en/docs?url=%2F0.53.13%2Fspec%2Fsource_en%2FChapter_02_Types.html)):
 
 Whenever a bidirectional conversion is required between a type `External<T>` and another type `R` the conversion will be effected by the runtime `T` via a special mechanism, unless:
-1. The type `External<T> <: R` or `R <: External<T>` case in which subtyping rules prevail.
+1. The type `External<T> <: R` or `R <: External<T>` case in which language subtyping rules prevail.
 2. The type `R ≡ External<U>` and `T ≡/ U` case in which a type error is reported. 
 
-> *Note:*
-> Currently, Rule 1 above applies only when `R ≡ Nothing` or `R ≡ Any`.
+> *Notes (not for the spec):*
+> * Currently, Rule 1 above applies only when `R ≡ Nothing` or `R ≡ Any`, but future iterations could make the `External` type covariant.
+> * The use of an explicit cast has been explicitly considered but it has three problems:
+>   * *Syntactic:* It is exceedingly verbose (`(e as T).getOrThrow()`) on each occurrence of a conversion.
+>   * *Semantic:* Casting only works along subtyping. When the runtime type `Extern<U>` of e is a subtype of T, the value of e as T is Some(e); otherwise, the value is None. However, `Extern<U>` is usually not a subtype of `T`.
+>   * *Performance:* Creating option types is known to currently have a noticeable overhead while communicating with external runtimes (particularly ArkTS) is often performance-sensitive.
 
 ## `Extern` variables
 
-Consider `extexp` an expression that has `Extern<R>` type and `cjexp` an expression that has an internal Cangjie type `T`. 
-
-
+Consider `extexp` an expression that has `Extern<R>` type and `cjexp` an expression that has an internal type `T`. 
 
 ### Using `let`
 
-The rules for using `Extern` types and let-bound variables are as follows:
+The instantiated rules for using `Extern` types and let-bound variables are as follows:
 
 1. `let x = extexp` and `let x: Extern<R> = extexp` are correct and equivalent and will result in a variable `x` of type `Extern<R>` having the value produced by `extexp` and linked to the runtime `R`. 
 2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the Cangjie `T` type and giving that value to `x`; if the conversion fails then `ExternConversionException` is thrown. 
 3. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
-4. `let x: Extern<S> = extexp` is incorrect if `R` and `S` are not the same. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
+4. `let x: Extern<S> = extexp` is correct if and only if `R ≡ S`. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
 
     ```cangjie
     let x: Extern<Python> = lookup(12.2, 34.1).name // type error Python != ArkTS
@@ -171,12 +169,6 @@ The rules for using `Extern` types and let-bound variables are as follows:
     let x: Extern<Python> = s                       // converted by Python
     ```
 
-> *Note:* It is a special property of the type `Extern<T>` to be automatically converted to and from internal types wherever the the type of the context requires.
-> The use of an explicit cast has been explicitly considered but it has three problems:
-> *Syntactic:* It is exceedingly verbose (`(e as T).getOrThrow()`) on each occurrence of a conversion.
-> *Semantic:* When the runtime type `Extern<U>` of e is a subtype of T, the value of e as T is Some(e); otherwise, the value is None. However, `Extern<U>` is not a subtype of `T`.
-> *Performance:* Creating option types has a noticeable overhead while communicating with external runtimes (particularly ArkTS) is often performance-sensitive.
-   
 
 ### Using `var`
 
