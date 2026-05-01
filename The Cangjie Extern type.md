@@ -159,9 +159,10 @@ Consider `extexp` an expression that has `Extern<R>` type and `cjexp` an express
 The instantiated rules for using `Extern` types and let-bound variables are as follows:
 
 1. `let x = extexp` and `let x: Extern<R> = extexp` are correct and equivalent and will result in a variable `x` of type `Extern<R>` having the value produced by `extexp` and linked to the runtime `R`. 
-2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the Cangjie `T` type and giving that value to `x`; if the conversion fails then `ExternConversionException` is thrown. 
-3. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
-4. `let x: Extern<S> = extexp` is correct if and only if `R ≡ S`. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
+2. `let x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type (`T ≢ Any`) and giving that value to `x`; if the conversion fails then `ExternConversionException` is thrown.
+3. `let x: Any = extexp` is correct and will not require any type conversion.
+4. `let x: Extern<R> = cjexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the internal type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
+5. `let x: Extern<S> = extexp` is correct if and only if `R ≡ S`. This is because the two runtimes cannot be assumed to have the capability to exchange data directly; using an intermediate variable of an internal type is required:
 
     ```cangjie
     let x: Extern<Python> = lookup(12.2, 34.1).name // type error Python != ArkTS
@@ -174,9 +175,10 @@ The instantiated rules for using `Extern` types and let-bound variables are as f
 
 The rules for using `Extern` types and var-bound variables are similar to those for `let`.
 
-1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern` initialized with value produced by `extexp`, linked to runtime `R`; if the conversion fails then `ExternConversionException` is thrown. 
-2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value; if the conversion fails then `ExternConversionException` is thrown. 
-3. `var x: Extern<S> = extexp` is incorrect if `R` and `S` are distinct, as the two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. 
+1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern<R>` initialized with value produced by `extexp`, linked to runtime `R`. 
+2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value; if the conversion fails then `ExternConversionException` is thrown.
+3. `var x: Extern<R> = clexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
+4. `var x: Extern<S> = extexp` is correct if and only if `R ≡ S`. The two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. The initialization must be mediated by an internal type. 
 
 The same rules apply to initializing assignment, i.e. when there is some code between the variable declaration and the initial assignment for the above cases. 
 
@@ -191,7 +193,7 @@ x = cjexp  // correct
 
 var x: Extern<S>
 // some code
-x = extexp  // correct if and only if R and S are the same
+x = extexp  // correct if and only if R ≡ S
 ```
 
 ### Using assignment
