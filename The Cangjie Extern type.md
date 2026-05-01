@@ -175,10 +175,11 @@ The instantiated rules for using `Extern` types and let-bound variables are as f
 
 The rules for using `Extern` types and var-bound variables are similar to those for `let`.
 
-1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern<R>` initialized with value produced by `extexp`, linked to runtime `R`. 
+1. `var x = extexp` and `var x: Extern<R> = extexp` are correct and equivalent and will result in a mutable variable `x` of type `Extern<R>` initialized with the value produced by `extexp`, linked to runtime `R`. 
 2. `var x: T = extexp` is correct and will result in the runtime `R` converting the value it produces to the internal `T` type and initializing `x` with that value; if the conversion fails then `ExternConversionException` is thrown.
-3. `var x: Extern<R> = clexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the Cangjie type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
-4. `var x: Extern<S> = extexp` is correct if and only if `R ≡ S`. The two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. The initialization must be mediated by an internal type. 
+3. `var A: Any = extexp` is correct and requires no conversion.
+4. `var x: Extern<R> = clexp` is correct and will result in the runtime `R` converting the value of `cjexp` from the intenal type `T` to the runtime for `R`; if the conversion fails then `ExternConversionException` is thrown. 
+5. `var x: Extern<S> = extexp` is correct if and only if `R ≡ S`. The two runtimes cannot be assumed to be capable of exchanging data directly. The compiler will issue a type error. The initialization must be mediated by an internal type. 
 
 The same rules apply to initializing assignment, i.e. when there is some code between the variable declaration and the initial assignment for the above cases. 
 
@@ -198,12 +199,13 @@ x = extexp  // correct if and only if R ≡ S
 
 ### Using assignment
 
-The rules for assignment involving `Extern` involve the same implict converstions as before, disallowing the case of `Extern<R>` and `Extern<S>` when `R` and `S` are distinct.
+The rules for assignment involving `Extern` involve the same implict converstions as before:
 
-1. If `var x: T` then `x = extexp` is correct. The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`; if the conversion fails then `ExternConversionException` is thrown. 
-2. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs; if the conversion fails then `ExternConversionException` is thrown. 
-3. If `x: Extern<S>` then `x = extexp` is correct if and only if `R` is `S`. If the two runtimes are not the same there is no schema for converting between the two. 
-
+1. If `var x: Extern<R>` then `x = extexp` is correct and is a normal Cangjie assignment requiring no converstion. 
+2. If `var x: T` then `x = extexp` is correct (`T ≢ Any`). The runtime of `R` will convert its result to `T`, the type of `x`, and assign it to `x`; if the conversion fails then `ExternConversionException` is thrown.
+3. If `var x: Any` then `x = extexp` is correct and requires no conversion. 
+4. If `var x: Extern<R>` then `x = cjexp` is correct. The runtime of `R` will convert the result of `cjexp` from `T` to whatever the foreign runtime needs; if the conversion fails then `ExternConversionException` is thrown. *Note:* `x` is a Cangjie variable hosted by the current runtime, so the assignment does not mean that the converted value is actually sent to the runtime `R`.
+5. If `x: Extern<S>` then `x = extexp` is correct if and only if `R ≡ S`, case in which it is a normal assignment. Otherwise a type error is reported. 
 
 
 ## Function calls
