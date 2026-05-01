@@ -143,7 +143,7 @@ Unlike `dynamic`, which suspends the normal type rules in order to facilitate in
 
 The rule for using `Extern<T>` is as follows (in the context of [Conversion Between Value Types](https://cangjie-lang.cn/en/docs?url=%2F0.53.13%2Fspec%2Fsource_en%2FChapter_02_Types.html)):
 
-Whenever a conversion is required between a type `External<T>` and another type `R` the conversion will be effected by the runtime `T` via a special mechanism, unless:
+Whenever a bidirectional conversion is required between a type `External<T>` and another type `R` the conversion will be effected by the runtime `T` via a special mechanism, unless:
 1. The type `External<T> <: R` or `R <: External<T>` case in which subtyping rules prevail.
 2. The type `R ≡ External<U>` and `T ≡/ U` case in which a type error is reported. 
 
