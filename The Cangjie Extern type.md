@@ -229,7 +229,8 @@ The same implicit conversions rules already discussed for variables apply; if th
 Therefore:
 * it is legal to pass an `Extern<T>` value to a function expecting an internally-typed argument.
 * it is legal to pass an internally-typed argument value to a function expecting an `Extern<T>` argument.
-* it is legal to pass an `Extern<T>` value to a function as an `Extern<R>` if and only if `R` and `T` are the same. 
+* it is legal to pass an `Extern<T>` value to a function as an `Extern<R>` if and only if `R` and `T` are the same.
+* `Any` and `Nothing` are an exception to the above because normal subtyping applies. 
 
 
 ### External functions
@@ -244,17 +245,18 @@ For instance, a function changes the colour of some `ArkUI` button object `b: Ex
 let setbColor : (Color) -> Unit = { (c: Color) => b.setColor(c) }
 ```
 
-where `Color` is some internal Cangjie type for storing colour information. 
-
-
+where `Color` is some internal  type for storing colour information. 
 
 
 ## Typing considerations
 
-The type `Extern<T>` is a subtype of `Any` but otherwise unrelated to the hierarchy of internal types. 
+The type `Extern<T>` is a subtype of `Any` and a supertype of `Nothing` but otherwise unrelated to the hierarchy of internal types. 
 The type `Extern<T>` may participate in the formation of composite data types such as tuples, structs, classes, etc. 
 The type `Extern<T>` can be used to instantiate a generic, for instance `Array<Extern<T>>`. 
 The type `Extern<T>` is invariant in `T`. 
+
+> *Note:*
+> The type `Extern<T>` may be revised to be variant in `T` in the future. 
 
 The safe casting works for `Extern<T>` as for any type and this cast must not be confused with the implicit conversion to and from internal types. 
 
@@ -267,6 +269,15 @@ let y = (x as Extern<T>).getOrThrow()
 
 let z = y as Int32
 // this is a type error as Extern<T> is never a subtype of Int32
+}
+```
+
+In polymorphic functions the rules for `External` ensure that the following function behaves correctly whether `T` is internal or external:
+
+```cangjie
+func f<T>(x:T): Any {
+  let y: Any = x
+   return y
 }
 ```
 
@@ -283,14 +294,15 @@ let z = y as Int32
 
 ## Dynamic features
 
-A value of type `Extern<T>` is dynamic in the sense that it can be decorated with arbitrary member access and method access operations. 
-The type of the member and the argument and return type of the method are always `Extern<T>` and they remain associated with the same proxy. 
+A value of type `Extern<T>` is dynamic in the sense that it will be evaluated by an external runtime which also bears the responsibility of converting the resulting value into an internally-typed value. 
+The type of the member and the argument and return type of the method are always `Extern<T>` and they remain associated with the same runtime `T`. 
 
-If `e` is a maximal expression of `Extern<T>` it will be evaluated by the runtime of `T`, which will receive the parse tree of `e` for evaluation. If the evaluation fails then `ExternDynamic<T>` is thrown. 
+If `e` is a maximal expression of `Extern<T>` it will be evaluated by the runtime of `T`, which will receive the parse tree of `e` for evaluation. If the evaluation fails then `ExternDynamicException` is thrown. 
+
 By *maximal* we mean that it is not a subexpression of a larger `Extern<T>` expression. 
 The typing rules of Cangjie apply, taking the rules for `Extern` into consideration. 
 
-*Note:* that the mapping of Cangjie identifiers cannot be assumed to be perfectly mapped onto the external runtime identifier, as lexical conversions may be different. It is the responsibility of the externally provided runtime to manage and document this mapping. 
+*Note:* The mapping of Cangjie identifiers cannot be assumed to be perfectly mapped onto external runtime identifiers, as lexical conversions may be different. It is the responsibility of the externally provided runtime to manage and document this mapping. 
 
 ### Examples
 
@@ -301,7 +313,7 @@ The following code is legal:
 ```cangjie
 vmjs.add(3, 4) // the type is Extern<ArkTS>
 ```
-The type of add is `(Extern<ArkTS>, Extern<ArkTS>) -> Extern<ArkTS>` and the arguments 3 and 4 type check. 
+The type of add is `(Extern<ArkTS>, Extern<ArkTS>) -> Extern<ArkTS>` and the arguments 3 and 4 type check via conversion from `Int32`.
 The parse tree will be sent to the `ArkTS` runtime. 
 
 The following code is illegal: 
@@ -314,7 +326,7 @@ The arguments have type `Extern<Python>` which cannot be converted to `Extern<Ar
 The following code is legal: 
 
 ```cangjie
-func f(z: Extern<Python>): Int32 { z }
+func f(z: Extern<Python>): Int32 { z }  
 
 vmjs.add(f(vmpy.x), f(vmpy.y)) // the type is Extern<ArkTS>
 ```
@@ -323,20 +335,27 @@ The `Python` runtime will process the subexpressions `vmpy.x` and `vmpy.y`.
 The function `f` will convert `Extern<Python>` to `Int32`. 
 The `ArkTS` runtime will process the subexpression `vmjs.add(...)`, which will also involve orchestrating the evaluation of the subexpressions for `Python` above. 
 
-Note that variables `x` and `y` do not exist in `vmpy` or if function `add` does not exist in `vmjs` then the `ExternDynamicException` and `ExternDynamicException` are thrown, respectively. 
+Note that if variables `x` and `y` do not exist in `vmpy` or if function `add` does not exist in `vmjs` then the `ExternDynamicException` will be thrown. 
 
 
 
 ## Creation of `Extern` values
 
 There is no Cangjie constructor for `Extern` and there is no specific Cangjie language support for constructing `Extern` data but the developer can do it in several ways. 
-`Extern<T>` values are produced by dynamic `Extern` expressions or are registered directly with the compiler via a special mechanism. 
+`Extern<T>` values are produced by dynamic `Extern` expressions or by compiler intrinsics.
 
 
 
 ## Implementation and API
 
 In order to support the type `External<T>` a type `T` must be implemented which will implement a new standard library interface `Runtime`.
+
+We require the type `T` to be a singleton. 
+
+> *Note:*
+> This is for the sake of simplicity and may be revised in the future.
+> It means that each *instance* of a foreign runtime requires its own Cangjie type.
+> This can be overcome programatically, I think, by using dispatcher-style runtimes. 
 
 ```cangjie
 public interface Runtime {
@@ -355,7 +374,10 @@ func bindExtern<T>(x: T) : Extern<T>
 ```
 
 
-## External classes (example usage)
+## External classes (typical usage)
+
+We estimate that library developers will prefer to wrap access to foreign runtimes into libraries that hide the use of `External<T>`. 
+Below we show a typical if very simple example. 
 
 Direct language support for external classes (i.e. types of objects residing in a foreign runtime) is not offered. 
 Accessing such objects is done using the dynamic features of `Extern`. 
