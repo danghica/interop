@@ -20,8 +20,9 @@ Main changes
 * ✅ language support for errors and exceptions 
   * Base Exception or Effect
   * Conversion or interpretation errors
-* Maybe consider finalizers, since they are mostly used for interop? 
- 
+* Maybe consider finalizers, since they are mostly used for interop?
+* ✅ Relationship with the type `Any`
+* Is the `T` in `Extern<T>` a singleton?
   
 # The Cangjie `Extern` type
 
@@ -45,7 +46,7 @@ When handling such references the following principles apply:
 
 ## Quick introduction
 
-`Extern<T>` is a new Cangjie type that is governed by some specific rules which will be discussed below. 
+`Extern<T>` is a special Cangjie type that is governed by some specific rules which will be discussed below. 
 Before giving all the details we show a flavour of how it is used. 
 
 For example the following function looks up geographic location using latitude and longitude and returns a geographical object.
@@ -135,13 +136,19 @@ Finally it will produce a Cangjie `String` type and bind it to the local `ln`.
 
 
 
-### Design philosophy
+### Design philosophy and general rules
 
-The design of `Extern<T>` is inspired by that of `dynamic` in C#. 
-The difference is that the requirement to provide an external runtime `T` will make it difficult to use `Extern` as an escape hatch from the type system, avoiding the dark patterns that `dynamic` is sometimes used for. 
-Note that *difficult* is not *impossible*: however, avoiding the type system is mainly a misguided convenience and not a deliberate exercise; by making it significantly less convenient than simply using the type system the motivation to pursue dark patterns disappears. 
-The type of the variable also makes it clear that access to that variable involves (de)serialization and is potentially expensive. 
+The type `Extern<T>` is inspired by that of `dynamic` in C#, except that it must be explicitly associated to an external runtime `T`.
+Unlike `dynamic`, which suspends the normal type rules in order to facilitate interop, `Extern` is deliberately designed for interop with `T`, making the abuses or mistakes that are common for `dynamic` less likely. 
 
+The rule for using `Extern<T>` is as follows (in the context of [Conversion Between Value Types](https://cangjie-lang.cn/en/docs?url=%2F0.53.13%2Fspec%2Fsource_en%2FChapter_02_Types.html)):
+
+Whenever a conversion is required between a type `External<T>` and another type `R` the conversion will be effected by the runtime `T` via a special mechanism, unless:
+1. The type `External<T> <: R` or `R <: External<T>` case in which subtyping rules prevail.
+2. The type `R ≡ External<U>` and `T ≡/ U` case in which a type error is reported. 
+
+> *Note:*
+> Currently, Rule 1 above applies only when `R ≡ Nothing` or `R ≡ Any`.
 
 ## `Extern` variables
 
