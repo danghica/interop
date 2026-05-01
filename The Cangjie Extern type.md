@@ -84,7 +84,7 @@ But in many scenarios the application developer may want to explore the returned
 
 
 
-### Simple scenario: precise typing
+### Static typing scenario
 
 In this application scenario the developer knows that the location data is always a landmark, therefore it can be cast into an internal type. 
 
@@ -113,8 +113,7 @@ The local variable will therefore store a `Landmark` object extracted from the `
 Also note that this process may fail, case in which a special exception, to be discussed later, will be raised. 
 
 
-
-### Complex scenario: dynamic typing
+### Dynamic typing scenario
 
 In this scenario the developer may be unwilling to implement a comprehensively typed interface to use the foreign library. 
 Assume the only thing that the developer wants is to extract the name of the returned geographical object. 
